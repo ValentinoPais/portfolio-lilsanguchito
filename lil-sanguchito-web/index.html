@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Portfolio de Lil Sanguchito, editor de video.">
+<title>Portfolio de Lil Sanguchito</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap">
+<style>
+/* Layout, como un canal de YouTube: arriba de todo, el canal (foto, nombre, suscriptores, descripción y
+   redes); debajo, los temas, que filtran los videos; después, los videos en formato YouTube (dos filas de
+   horizontales, una fila infinita de verticales, dos filas más y así) y un pie con el año y el nombre.
+   Encima, fija y apenas transparente, la barra: el título a la izquierda y Discord, Instagram y YouTube en
+   blanco a la derecha. En pantallas grandes, el canal, los temas y los videos van al centro, con margen a
+   los costados. Tipografía de YouTube: Roboto.
+   Imágenes a sangre, sin cajas ni esquinas redondeadas; el video manda */
+:root {
+  color-scheme: dark;
+  --bg: #0b0b0a;      /* negro cálido */
+  --bg2: #151514;     /* carbón: ventanas */
+  --bg3: #1d1d1b;     /* cajas vacías */
+  --line: #262624;
+  --text: #eceae4;    /* blanco hueso */
+  --muted: #8f8c86;   /* piedra */
+  --faint: #5d5b57;
+  --acc: #9272f0;     /* violeta: solo lo que se toca */
+  --acc-soft: #c8bae9;   /* el violeta, apenas: el título de la barra con el mouse encima */
+  --shade: rgba(5, 5, 5, .9);   /* detrás de las ventanas: casi negro y difuminado */
+  --hl: rgba(236, 234, 228, .08);   /* el hover de toda la página: se ilumina el recuadro entero */
+  --on-img: rgba(236, 234, 228, .74);
+  --sans: "Roboto", Arial, sans-serif;   /* la de YouTube */
+  --mono: var(--sans);
+  --gut: 4px;        /* un solo margen mínimo en toda la página: bordes, entre videos y dentro de las ventanas */
+  --tx: 8px;         /* el texto dentro de las cajas, para que no quede pegado al borde */
+  --barH: calc(56px + env(safe-area-inset-top, 0px));   /* el alto de la barra de arriba */
+  --maxW: 1284px;    /* el ancho del canal y de los videos en pantallas grandes, como en un canal de YouTube: el resto queda de margen a los costados */
+  --frame: 52px;     /* el borde alrededor de las ventanas, el mismo en las dos: tocándolo se vuelve a la página */
+}
+* { box-sizing: border-box; }
+html { height: 100%; background: var(--bg); overflow: hidden; }   /* la página entera no se desliza: se desliza el contenedor de los videos y el pie */
+body { margin: 0; height: 100%; position: relative; overflow: hidden; background: var(--bg); color: var(--text); font: 400 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }   /* sin el margen del navegador: los videos van al margen mínimo del borde */
+.page { height: 100%; overflow-x: hidden; overflow-y: auto; scroll-behavior: smooth; padding: var(--barH) var(--gut) 0; outline: none; }   /* lo único que se desliza: los videos y el pie, que pasan por debajo de la barra de arriba. Lo que se agranda con el mouse encima, en los costados, no abre una barra de costado */
+/* la barra de scroll: la del sistema no se ve y va una propia, que arranca justo debajo de la barra de arriba,
+   como si esa fuera una pieza aparte, y llega hasta abajo de todo. Fina y clara; con el mouse encima se
+   ensancha y se puede arrastrar, y tocando el riel salta hasta ahí. En el celular aparece solo al deslizar */
+.page { scrollbar-width: none; }
+.page::-webkit-scrollbar { display: none; }
+.sbar { position: fixed; z-index: 11; top: calc(var(--barH) + 3px); right: 0; bottom: 3px; width: 14px; touch-action: none; }
+.sbar[hidden] { display: none; }
+.sbar-k { position: absolute; top: 0; right: 3px; width: 6px; min-height: 36px; border-radius: 3px; background: rgba(236, 234, 228, .2); transition: width .15s, background-color .2s, opacity .3s; will-change: transform; }
+.sbar.on .sbar-k { background: rgba(236, 234, 228, .32); }
+@media (hover: hover) { .sbar:hover .sbar-k, .sbar.drag .sbar-k { width: 8px; background: rgba(236, 234, 228, .5); } }
+@media (hover: none) { .sbar { pointer-events: none; } .sbar-k { opacity: 0; } .sbar.on .sbar-k { opacity: 1; } }
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+img { display: block; max-width: 100%; }
+:focus-visible { outline: 1.5px solid var(--acc); outline-offset: 3px; }
+.thumb:focus-visible { outline-offset: -2px; }   /* dentro de la miniatura */
+.mono { font-family: var(--mono); }
+.lab { display: block; font: 500 11px/1.2 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+/* ---------- barra de arriba ----------
+   Siempre arriba, encima de lo que se desliza, como la de YouTube: apenas transparente, así los videos que
+   pasan por debajo se ven difuminados. Todo lo demás es del mismo negro. A la izquierda el título (sale de la
+   config, así se cambia sin tocar la web) y a la derecha Discord, Instagram y YouTube, los tres en blanco, con
+   los links de la config. Ocupa todo el ancho; el título y los íconos van a 16 px de los bordes, un poco más
+   adentro que los videos, para que no queden pegados */
+.top { position: absolute; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: var(--barH); padding: env(safe-area-inset-top, 0px) calc(16px + env(safe-area-inset-right, 0px)) 0 calc(16px + env(safe-area-inset-left, 0px)); background: rgba(11, 11, 10, .74); -webkit-backdrop-filter: blur(20px) saturate(1.3); backdrop-filter: blur(20px) saturate(1.3); }
+.top-t { min-width: 0; font: 700 20px/28px var(--sans); letter-spacing: -.01em; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color .2s; }   /* tocarlo baja hasta el final y, si ya estás abajo, sube */
+.top-links { display: flex; gap: var(--gut); }
+.top-links a { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--text); transition: background .2s; }
+.top-links svg, .top-links img.tl-ic { width: 22px; height: 22px; }
+.top-links .svg-inline--fa { width: 22px; height: 22px; font-size: 22px; }
+.top-links a:has(.svg-inline--fa) .tl-gen { display: none; }   /* el de muestra, solo si no cargó el de la marca */
+@media (hover: hover) { .top-links a:hover { background: var(--hl); } }   /* sin imagen: se ilumina el recuadro, como los botones */
+
+
+/* ---------- el canal: arriba de todo, como el encabezado de un canal de YouTube ----------
+   La foto, el nombre, el canal con sus suscriptores (de YouTube) y la cantidad de videos de la página, la
+   descripción entera y las redes. Todo lo demás sale de la config. En pantallas grandes va al
+   centro, alineado con los videos y con margen a los costados; si no, al mismo margen que la barra de arriba.
+   Una línea fina, de lado a lado, lo separa de los videos */
+.ch { display: flex; align-items: flex-start; gap: 24px; margin: 0 calc(-1 * var(--gut)); padding: 24px max(16px, (100% - var(--maxW)) / 2 + var(--gut)) 28px; border-bottom: 1px solid var(--line); }
+.ch-av { flex: none; width: 160px; height: 160px; border-radius: 50%; overflow: hidden; background: var(--bg3); box-shadow: 0 0 0 1px var(--line); }
+.ch-av img { width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; }
+.ch-t { min-width: 0; max-width: 760px; padding-top: 8px; }
+.ch-n { margin: 0 0 6px; font: 700 36px/44px var(--sans); letter-spacing: -.01em; overflow-wrap: anywhere; }
+.ch-s { margin: 0 0 10px; font: 400 14px/20px var(--sans); color: var(--muted); }
+.ch-s b { font-weight: 500; color: var(--text); }
+.ch-d { margin: 0 0 12px; font: 400 14px/20px var(--sans); color: var(--text); white-space: pre-line; overflow-wrap: anywhere; }   /* entera, con sus párrafos */
+.ch-l { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 0; font: 500 14px/20px var(--sans); }
+.ch-l a { position: relative; z-index: 0; display: inline-flex; align-items: center; gap: 6px; color: var(--acc); }
+.ch-l a::before { content: ""; position: absolute; inset: calc(-1 * var(--gut)); z-index: -1; background: var(--hl); opacity: 0; transition: opacity .2s; pointer-events: none; }
+.ch-l svg, .ch-l .svg-inline--fa { width: 16px; height: 16px; font-size: 16px; flex: none; }
+.ch-l a:has(.svg-inline--fa) .tl-gen { display: none; }
+@media (hover: hover) { .ch-l a:hover::before { opacity: 1; } }
+@media (max-width: 759px) { .ch-av { width: 120px; height: 120px; } .ch-n { font-size: 30px; line-height: 38px; } }
+/* celular, como la app de YouTube: la foto a la izquierda del nombre y, debajo, todo lo demás a lo ancho */
+@media (max-width: 599px) {
+  .ch { display: grid; grid-template-columns: 72px minmax(0, 1fr); column-gap: 16px; row-gap: 12px; align-items: center; padding: 16px 16px 20px; }
+  .ch-av { grid-row: 1 / span 2; width: 72px; height: 72px; }
+  .ch-t { display: contents; }
+  .ch-n { grid-column: 2; align-self: end; margin: 0; font-size: 24px; line-height: 30px; }
+  .ch-s { grid-column: 2; align-self: start; margin: 0; font-size: 12px; line-height: 18px; }
+  .ch-d, .ch-l { grid-column: 1 / -1; margin: 0; }
+}
+
+/* ---------- secciones ---------- */
+.sec { padding-block: 12px 64px; }   /* debajo de la barra, un margen: lugar para el recuadro iluminado de la tarjeta con el mouse encima */
+
+/* trabajo como en YouTube: la miniatura y, abajo, la foto del canal con el título y, debajo, el canal y las views */
+.work { position: relative; display: block; width: 100%; min-width: 0; cursor: pointer; transition: background-color .2s, box-shadow .2s; }
+.work:focus-within { z-index: 3; }
+/* el hover. Las fotos de los canales, en la página y en las ventanas, y solo con el mouse sobre la foto, se
+   agrandan y se inclinan hacia el mouse con un brillo y una sombra, como las tarjetas de la biblioteca de
+   Steam. Todo lo demás se ilumina entero, sin agrandarse: cada tarjeta de video (horizontal o vertical), cada
+   video de la lista, el canal en las ventanas, los links y los botones */
+a.w-chl, a.sd-ch { position: relative; z-index: 0; }
+a.w-chl::before, a.sd-ch::before { content: ""; position: absolute; inset: calc(-1 * var(--gut)); z-index: -1; background: var(--hl); opacity: 0; transition: opacity .2s; pointer-events: none; }
+@media (hover: hover) {
+  a.w-chl:hover::before, a.sd-ch:hover::before { opacity: 1; }
+  .top-t:hover { color: var(--acc-soft); }   /* el título: apenas violeta, sin agrandarse ni iluminar el recuadro */
+  .work:hover, .w-it:not(.now):hover { background: var(--hl); box-shadow: 0 0 0 var(--gut) var(--hl); }   /* la tarjeta entera, más clara */
+  .work:has(.yt-av:hover) { background: transparent; box-shadow: none; }   /* sobre la foto del canal, solo la foto */
+  a.w-chl:has(.w-av:hover)::before, a.sd-ch:has(.sh-av:hover)::before { opacity: 0; }
+  .track.dragging .work:hover, html.grabbing .work:hover, .w-list.dragging .w-it:hover { background: transparent; box-shadow: none; }   /* arrastrando, nada */
+  .btn:hover, .x:hover { background: var(--hl); }
+  .sh-it:not(.on) .sh-v:hover { filter: brightness(.75); }
+}
+.thumb { position: relative; display: block; width: 100%; overflow: hidden; background: var(--bg3); }
+.work:has(.thumb:focus-visible) { background: var(--hl); box-shadow: 0 0 0 var(--gut) var(--hl); }   /* con el teclado, igual que con el mouse */
+.r169 { aspect-ratio: 16 / 9; } .r916 { aspect-ratio: 9 / 16; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; user-select: none; }
+.dur { position: absolute; right: var(--gut); bottom: var(--gut); font: 500 12px/1 var(--sans); color: var(--text); background: rgba(11, 11, 10, .82); padding: 3px 4px; font-variant-numeric: tabular-nums; }
+.yt-m { position: relative; z-index: 1; display: flex; align-items: flex-start; gap: 12px; margin-top: 12px; }
+.yt-av { flex: none; width: 36px; height: 36px; border-radius: 50%; overflow: hidden; background: var(--bg3); box-shadow: 0 0 0 1px var(--line); }
+/* la foto del canal (en la página y en las ventanas) reacciona al mouse como una tarjeta: se inclina, se agranda y brilla */
+.yt-av, .w-av, .sh-av { position: relative; transform: perspective(240px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) scale(var(--s, 1)); transition: transform .55s cubic-bezier(.2, .8, .2, 1), box-shadow .45s; }
+.yt-av.tilt, .w-av.tilt, .sh-av.tilt { transition: box-shadow .45s; will-change: transform; }   /* la inclinación la mueve el JS, cuadro a cuadro */
+.yt-av.hov, .w-av.hov, .sh-av.hov { z-index: 1; box-shadow: 0 12px 24px -8px rgba(0, 0, 0, .95), 0 0 0 1px rgba(255, 255, 255, .14); }
+.yt-av::after, .w-av::after, .sh-av::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .35s; background: radial-gradient(circle at var(--gx, 50%) var(--gy, 0%), rgba(255, 255, 255, .38), rgba(255, 255, 255, 0) 64%); mix-blend-mode: soft-light; }
+.yt-av.hov::after, .w-av.hov::after, .sh-av.hov::after { opacity: 1; }
+.ch-av { position: relative; transform: perspective(800px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) scale(var(--s, 1)); transition: transform .55s cubic-bezier(.2, .8, .2, 1), box-shadow .45s; }
+.ch-av.tilt { transition: box-shadow .45s; will-change: transform; }
+.ch-av.hov { z-index: 1; box-shadow: 0 24px 44px -14px rgba(0, 0, 0, .95), 0 0 0 1px rgba(255, 255, 255, .14); }
+.ch-av::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .35s; background: radial-gradient(circle at var(--gx, 50%) var(--gy, 0%), rgba(255, 255, 255, .34), rgba(255, 255, 255, 0) 64%); mix-blend-mode: soft-light; }
+.ch-av.hov::after { opacity: 1; }
+.yt-av img { width: 100%; height: 100%; object-fit: cover; }
+.yt-av.ini { display: grid; place-items: center; font: 400 15px/1 var(--sans); color: var(--muted); }
+.yt-t { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.yt-ttl { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font: 500 16px/22px var(--sans); color: var(--text); overflow-wrap: anywhere; }
+.yt-s { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font: 400 14px/20px var(--sans); color: var(--muted); }
+a.yt-ch:hover, a.yt-ch:focus-visible { color: var(--text); }
+.yt-v, .w-views, .w-it-s.w-it-v { white-space: nowrap; color: var(--acc); }   /* las views, resaltadas con el acento */
+.yt-v i, .w-it-s i { font-style: normal; font-size: .75em; line-height: 0; }   /* el ▶ chico no agranda el renglón */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.work.v .yt-m { margin-top: 10px; }
+.work.v .yt-s { font-size: 14px; }
+
+/* los temas, como los del inicio de YouTube: Todo y los temas de los videos, de los que más tienen a los que
+   menos. Elegido, en blanco hueso; los demás, apenas más claros que el fondo, y con el mouse encima, un poco
+   más. Si no entran, se deslizan de costado y aparecen las flechas, como en YouTube */
+.chips { position: relative; max-width: var(--maxW); margin: 0 auto 24px; }
+.chips[hidden] { display: none; }
+.chip-r { display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; scroll-behavior: smooth; padding: 4px; margin: -4px; }   /* los 4 px: lugar para el anillo del teclado */
+.chip-r::-webkit-scrollbar { display: none; }
+.chip { flex: none; height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: rgba(236, 234, 228, .1); color: var(--text); font: 500 14px/32px var(--sans); white-space: nowrap; cursor: pointer; transition: background-color .2s, color .2s; }
+.chip[aria-pressed="true"] { background: var(--text); color: #0f0f0f; cursor: default; }
+.chip:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+.chip-a { position: absolute; top: -4px; bottom: -4px; z-index: 1; display: none; align-items: center; width: 84px; padding: 0; border: 0; background: none; color: var(--text); cursor: pointer; }
+.chip-a.prev { left: -4px; justify-content: flex-start; background: linear-gradient(to right, var(--bg) 50%, rgba(11, 11, 10, 0)); }
+.chip-a.next { right: -4px; justify-content: flex-end; background: linear-gradient(to left, var(--bg) 50%, rgba(11, 11, 10, 0)); }
+.chip-a i { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; transition: background-color .2s; }
+.chip-a svg { width: 24px; height: 24px; }
+@media (hover: hover) {
+  .chip:not([aria-pressed="true"]):hover { background: rgba(236, 234, 228, .2); }
+  .chips.l .chip-a.prev, .chips.r .chip-a.next { display: flex; }   /* con mouse: las flechas, solo si hay más para ese lado */
+  .chip-a:hover i { background: rgba(236, 234, 228, .1); }
+}
+@keyframes feed-in { from { opacity: 0; } to { opacity: 1; } }
+.feed.swap { animation: feed-in .3s ease; }   /* al elegir un tema, los videos aparecen suave */
+
+/* el feed: filas de horizontales y, entre ellas, una fila infinita de verticales. En pantallas grandes, al
+   centro y de a tres por fila, como los videos de un canal de YouTube */
+.feed { --cols: 3; --vis: 6; max-width: var(--maxW); margin-inline: auto; }
+.feed > * + * { margin-top: 48px; }
+.hgrid { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 36px var(--gut); align-items: start; }
+.shelf-h { margin-bottom: 14px; font: 700 20px/28px var(--sans); letter-spacing: 0; text-transform: none; color: var(--text); }
+.car { position: relative; }
+.track { position: relative; display: grid; grid-auto-flow: column; gap: var(--gut); overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-y; scrollbar-width: none; align-items: start; padding: 16px var(--gut); margin: -16px calc(-1 * var(--gut)); scroll-padding-inline: var(--gut); }   /* de borde a borde */
+.track::-webkit-scrollbar { display: none; }
+.track > * { translate: var(--sub, 0px) 0; }   /* el pedacito de píxel que el scroll no acepta: así el paso automático es suave */
+/* sin imán en ningún lado: la fila anda sola todo el tiempo (con imán, en el celular no podía avanzar) */
+.track.dragging { cursor: grabbing; user-select: none; }
+.track.dragging .work { cursor: grabbing; }
+.rail { grid-auto-columns: calc((100% - (var(--vis) - 1) * var(--gut)) / var(--vis)); }
+
+/* ---------- pie ----------
+   Después de una línea fina de lado a lado, el año y el nombre, con la atribución a YouTube (la piden si se
+   muestran sus views) */
+.foot { margin-inline: calc(-1 * var(--gut)); padding: 28px 24px calc(28px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
+.foot-c { margin: 0; text-align: center; font: 400 13px/1.5 var(--sans); color: var(--muted); }
+.btn { display: inline-block; font: 500 11px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; border: 1px solid var(--line); padding: 8px 11px; white-space: nowrap; }
+.proto[hidden] { display: none; }
+.proto.warn { max-width: calc(100% - 2 * var(--gut)); letter-spacing: 0; text-transform: none; font-size: 11px; line-height: 1.35; color: var(--text); opacity: 1; }   /* qué no respondió, para arreglarlo */
+.empty { margin: 56px 0; text-align: center; color: var(--muted); font: 400 14px/20px var(--sans); }
+.proto { position: fixed; left: var(--gut); bottom: calc(var(--gut) + env(safe-area-inset-bottom, 0px)); z-index: 15; opacity: .9; font: 500 9px/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); background: var(--bg2); border: 1px solid var(--line); padding: 7px 9px; }
+
+/* ---------- ventanas ---------- */
+dialog.dlg { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); border: 0; background: transparent; color: var(--text); }
+dialog.dlg[open] { display: grid; place-items: center; }
+dialog.dlg::backdrop { background: var(--shade); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }   /* igual en las dos ventanas */
+dialog.watch .panel:focus, .sh-feed:focus { outline: none; }   /* al abrir, el foco va a la ventana: Tab lleva al play */
+.panel { width: min(1080px, 100% - 2 * var(--gut)); max-height: calc(100% - 2 * var(--gut)); overflow: auto; background: var(--bg2); border: 1px solid var(--line); padding: var(--gut); overscroll-behavior: contain; }
+.x { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line); font: 400 14px/1 var(--sans); }   /* cerrar: redondo */
+/* reproductor */
+.stage { position: relative; margin-inline: auto; background: #000; overflow: hidden; }
+.stage.h { aspect-ratio: 16 / 9; width: 100%; }
+.stage img { width: 100%; height: 100%; object-fit: cover; }
+.play { position: absolute; inset: 0; display: grid; place-items: center; }
+.play span { width: 68px; height: 48px; border-radius: 12px; display: grid; place-items: center; background: rgba(11, 11, 10, .72); font-size: 20px; padding-left: 3px; transition: background .2s; }
+.play:focus-visible span { background: var(--acc); }   /* violeta: solo lo que se toca */
+@media (hover: hover) { .play:hover span { background: var(--acc); } }   /* en el celular no queda pegado después del toque */
+.stage iframe, .sh-v iframe { position: absolute; inset: 0; z-index: 4; width: 100%; height: 100%; border: 0; background: #000; }   /* el reproductor de verdad, encima de la miniatura y de los textos */
+.stage .msg, .sh-v .msg { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px var(--tx); background: rgba(11, 11, 10, .82); font: 500 13px/1.4 var(--sans); }
+/* al abrir, las ventanas aparecen de a poco */
+@keyframes pop-in { from { opacity: 0; transform: translateY(10px) scale(.99); } }
+@keyframes fade-in { from { opacity: 0; } }
+dialog.dlg[open]::backdrop { animation: fade-in .22s ease-out; }
+dialog.watch[open] > .panel, dialog.shorts[open] > .sh-feed { animation: pop-in .26s cubic-bezier(.2, .8, .2, 1); }
+/* video horizontal: como la página de un video en YouTube. A la izquierda el video y sus datos; a la
+   derecha, el que estás viendo primero y los demás videos en una lista angosta */
+/* la ventana llega a un margen de cada borde, y ese mismo margen separa el video de la lista, sin huecos.
+   El video es lo más grande que entra dejando a la vista el título, la fila del canal (con las views) y
+   al menos dos renglones de la descripción, minimizada como en YouTube; la lista toma lo que sobra, con
+   360 px como mínimo. Con “…más” la descripción se agranda para abajo y se lee scrolleando la columna */
+dialog.watch .panel { --side: 360px; --meta: 148px; --stage: min(100vw - 2 * var(--frame) - 3 * var(--gut) - var(--side) - 2px, (100dvh - 2 * var(--frame) - 2 * var(--gut) - 2px - var(--meta)) * 16 / 9);
+  position: relative; width: calc(100vw - 2 * var(--frame)); height: calc(100dvh - 2 * var(--frame)); max-height: none; overflow: hidden; display: grid; grid-template-columns: var(--stage) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: var(--gut); padding: var(--gut); }
+.w-main { width: calc(var(--stage) + var(--gut)); margin-left: calc(-1 * var(--gut)); padding-left: var(--gut); min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+.w-main::-webkit-scrollbar { display: none; }
+.w-main .stage { flex: none; width: 100%; }
+.w-body { display: contents; }   /* en la compu, el título, el canal y la descripción siguen en la columna del video */
+.w-t { flex: none; margin: 8px 0 0; font: 700 20px/28px var(--sans); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.w-ch { flex: none; display: flex; align-items: center; gap: 8px 12px; margin-top: 8px; }
+.w-chl { display: flex; align-items: center; gap: 12px; min-width: 0; margin-right: auto; }
+.w-av { flex: none; width: 40px; height: 40px; border-radius: 50%; overflow: hidden; background: var(--bg3); box-shadow: 0 0 0 1px var(--line); }
+.w-av img { width: 100%; height: 100%; object-fit: cover; }
+.w-av.ini { display: grid; place-items: center; font: 400 17px/1 var(--sans); color: var(--muted); }
+.w-cht { display: flex; flex-direction: column; min-width: 0; }
+.w-cht b { font: 500 16px/22px var(--sans); }
+.w-cht span { font: 400 12px/18px var(--sans); color: var(--muted); }
+.w-stat { display: flex; flex-direction: column; align-items: flex-end; min-width: 0; text-align: right; }   /* las views, siempre a la vista */
+.w-views { font: 500 14px/20px var(--sans); }
+.w-desc { flex: 1 1 0; min-height: calc(40px + 2 * var(--tx)); overflow: hidden; margin-top: 8px; padding: var(--tx); background: var(--bg3); font: 400 14px/20px var(--sans); }   /* ocupa lo que queda debajo del canal */
+.w-desc.open { flex: 0 0 auto; overflow: visible; }   /* abierta: se agranda para abajo */
+.w-desc .nod { color: var(--muted); }
+.d-txt { position: relative; white-space: pre-line; overflow-wrap: anywhere; color: var(--text); }   /* la descripción original del video */
+.d-txt a { color: var(--acc); }
+/* minimizada: los renglones que entran (dos como mínimo), el texto corrido y “…más” al final, como en YouTube */
+.w-desc:not(.open):not(.fits) .d-txt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--lines, 2); overflow: hidden; white-space: normal; }
+.d-more { font: 500 14px/20px var(--sans); color: var(--text); }
+.d-more[hidden] { display: none; }
+.w-desc .d-more { margin-left: 8px; }
+.w-desc.cut:not(.open) .d-more { position: absolute; right: 0; bottom: 0; margin: 0; padding-left: 44px; background: linear-gradient(90deg, rgba(29, 29, 27, 0), var(--bg3) 40px); }
+.w-side { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.w-sh { flex: none; display: flex; align-items: center; min-height: 36px; padding-right: 44px; margin-bottom: 0; font: 700 16px/22px var(--sans); }
+.w-x { position: absolute; top: var(--gut); right: var(--gut); z-index: 2; background: var(--bg2); }
+.w-list { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); align-content: start; gap: var(--gut); padding: var(--gut); margin: 0 calc(-1 * var(--gut)) calc(-1 * var(--gut)); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; cursor: grab; user-select: none; }
+/* la barra de scroll, siempre a la vista y pegada al borde (con estilo propio no se esconde en la Mac) */
+.w-list::-webkit-scrollbar, .w-body::-webkit-scrollbar, .sh-pan .d-txt::-webkit-scrollbar { width: 6px; }
+.w-list::-webkit-scrollbar-thumb, .w-body::-webkit-scrollbar-thumb, .sh-pan .d-txt::-webkit-scrollbar-thumb { background: #3b3b38; }
+.w-list::-webkit-scrollbar-thumb:hover, .w-body::-webkit-scrollbar-thumb:hover, .sh-pan .d-txt::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+.w-list::-webkit-scrollbar-track, .w-body::-webkit-scrollbar-track, .sh-pan .d-txt::-webkit-scrollbar-track { background: transparent; }
+@supports not selector(::-webkit-scrollbar) { .w-list, .w-body, .sh-pan .d-txt { scrollbar-width: thin; scrollbar-color: #3b3b38 transparent; } }
+.w-list.dragging { cursor: grabbing; }
+html.grabbing, html.grabbing * { cursor: grabbing !important; -webkit-user-select: none !important; user-select: none !important; }   /* arrastrando con el mouse, como con el dedo */
+.w-it { position: relative; display: grid; grid-template-columns: max(140px, 42%) minmax(0, 1fr); gap: 8px; align-items: start; width: 100%; }
+.w-it { transition: background-color .2s, box-shadow .2s; }
+.w-it:focus-visible:not(.now) { background: var(--hl); box-shadow: 0 0 0 var(--gut) var(--hl); }
+.w-list.dragging .w-it { cursor: grabbing; }
+.w-th { position: relative; display: block; overflow: hidden; background: var(--bg3); }
+.w-th img { width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; }
+/* el que está en pantalla queda marcado en la lista, en su lugar: así la lista no salta al cambiar */
+.w-th::before { content: "Viendo"; position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; background: rgba(11, 11, 10, .64); box-shadow: inset 0 0 0 2px var(--acc); font: 500 11px/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--text); opacity: 0; transition: opacity .35s; pointer-events: none; }
+.w-it.now .w-th::before { opacity: 1; }
+.w-it.now { cursor: default; }
+.w-it-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.w-it-ttl { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font: 500 14px/20px var(--sans); color: var(--text); margin-bottom: 2px; }
+.w-it-s { font: 400 12px/18px var(--sans); color: var(--muted); }
+/* al cambiar de video, la miniatura que tocaste vuela hasta el lugar del video */
+.w-ghost { position: fixed; z-index: 20; margin: 0; object-fit: cover; transform-origin: 0 0; pointer-events: none; outline: 2px solid var(--acc); outline-offset: -2px; box-shadow: 0 30px 70px -24px rgba(0, 0, 0, .95); will-change: transform; }   /* con el borde violeta: es lo que tocaste */
+
+/* V2 · verticales, como Shorts: uno por pantalla, con el anterior asomando arriba y el siguiente abajo,
+   más oscuros. El play, al centro; al lado, siempre abierta, la descripción con el título, las views y los
+   likes, y el canal. Se pasan con la rueda, el dedo, arrastrando o con las flechas */
+dialog.shorts { --shGap: 12px; --peek: calc(var(--frame) - var(--shGap)); --shV: min(100dvh - 2 * var(--peek) - 2 * var(--shGap), (100vw - 436px) * 16 / 9, (100vw - 76px) / 2 * 16 / 9); --shW: calc(var(--shV) * 9 / 16); --shP: max(360px, var(--shW)); }   /* --shP: la descripción, tan ancha como el reel y nunca menos de 360 px */   /* --shGap: el margen chico entre un reel y el siguiente */
+dialog.shorts[open] { display: block; }
+.sh-feed { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; scroll-snap-type: y mandatory; scrollbar-width: none; padding: calc(var(--peek) + var(--shGap)) 0 calc(100dvh - var(--shV) - 2 * var(--shGap) - var(--peek)); }
+.sh-feed::-webkit-scrollbar { display: none; }
+.sh-feed.drag { scroll-snap-type: none; cursor: grabbing; user-select: none; }   /* arrastrando con el mouse, como un dedo */
+.sh-it { display: grid; grid-template-columns: var(--shW) var(--shP); column-gap: var(--gut); width: max-content; margin: 0 0 var(--shGap) clamp(var(--gut), 50vw - var(--shW) / 2, 100vw - var(--shW) - var(--shP) - 64px);   /* el reel, centrado en la pantalla; la descripción, a su derecha */ scroll-snap-align: start; scroll-snap-stop: always; scroll-margin-top: calc(var(--peek) + var(--shGap)); }
+.sh-v { position: relative; grid-row: 1; width: var(--shW); height: var(--shV); background: #000; overflow: hidden; transition: filter .4s; }
+.sh-it:not(.on) .sh-v { filter: brightness(.55); cursor: pointer; }   /* el de arriba y el de abajo, más oscuros */
+.sh-it .sh-act, .sh-it .sh-pan, .sh-it .sh-info { transition: opacity .35s; }
+.sh-it:not(.on) .sh-act, .sh-it:not(.on) .sh-pan, .sh-it:not(.on) .sh-info { opacity: 0; pointer-events: none; }   /* de los que asoman, solo el video */
+.sh-v > img { width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; user-select: none; }
+.sh-v .msg { top: 0; bottom: auto; }
+.sh-act { grid-row: 1; align-self: end; display: none; flex-direction: column; align-items: center; gap: 16px; }   /* en la compu, los números van en la descripción */
+.sh-a { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 56px; font: 500 12px/16px var(--sans); color: var(--text); text-align: center; }
+.sh-i { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .1); }
+.sh-i svg { width: 24px; height: 24px; }
+.sh-a.v { color: var(--acc); }   /* las views, en violeta como en toda la página */
+/* la descripción, siempre abierta, al lado del video */
+.sh-pan { position: relative; grid-row: 1; height: var(--shV); display: flex; flex-direction: column; gap: 12px; padding: var(--tx); background: var(--bg2); border: 1px solid var(--line); overflow: hidden; }
+.sd-t { margin: 0; padding-right: 44px; font: 700 18px/26px var(--sans); overflow-wrap: anywhere; }
+.sd-x { position: absolute; top: var(--gut); right: var(--gut); background: var(--bg2); }   /* cerrar: al lado del título, como en el reproductor */
+.sh-pan .d-txt, .sh-pan .nod { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding-top: 12px; border-top: 1px solid var(--line); font: 400 14px/20px var(--sans); }
+.sh-pan .nod { color: var(--muted); }
+.sd-foot { flex: none; display: flex; align-items: center; gap: 12px; padding-top: var(--tx); border-top: 1px solid var(--line); font: 500 14px/20px var(--sans); }   /* abajo de todo: el canal, las views y los likes */
+.sd-ch { display: flex; align-items: center; gap: 8px; min-width: 0; margin-right: auto; }
+.sd-ch b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-n { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.sd-n svg { width: 16px; height: 16px; flex: none; }
+.sd-n.sd-v { color: var(--acc); }   /* las views, en violeta como en toda la página */
+/* sobre el video (tablet y celular): el canal, el título y la descripción */
+.sh-info { display: none; position: absolute; left: 0; right: 0; bottom: 0; padding: 96px var(--tx) var(--tx); background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .8) 45%); pointer-events: none; }
+.sh-ch { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; font: 500 14px/20px var(--sans); pointer-events: auto; }
+.sh-ch b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
+.sh-av { flex: none; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background: var(--bg3); box-shadow: 0 0 0 1px rgba(255, 255, 255, .16); }
+.sh-av img { width: 100%; height: 100%; object-fit: cover; }
+.sh-av.ini { display: grid; place-items: center; font: 400 14px/1 var(--sans); color: var(--muted); }
+.sh-ttl { margin: 8px 0 0; font: 500 15px/21px var(--sans); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.sh-dx { margin-top: 6px; max-height: 32dvh; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; font: 400 13px/18px var(--sans); color: var(--on-img); white-space: pre-line; overflow-wrap: anywhere; pointer-events: auto; }   /* siempre abierta; si es muy larga, se desliza adentro */
+.sh-dx::-webkit-scrollbar { display: none; }
+.sh-dx a { color: var(--acc); }
+.sh-x { position: fixed; z-index: 3; top: var(--gut); right: var(--gut); display: none; background: var(--bg2); }   /* en la compu, cerrar va en la descripción */
+.sh-nav { position: fixed; z-index: 3; right: var(--gut); top: 50%; translate: 0 -50%; display: flex; flex-direction: column; gap: 12px; }
+.sh-nav button { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .1); font: 400 20px/1 var(--sans); transition: background .2s, opacity .2s; }
+@media (hover: hover) { .sh-nav button:not(:disabled):hover { background: rgba(255, 255, 255, .2); } }
+.sh-nav button:disabled { opacity: .3; cursor: default; }
+@media (hover: hover) and (pointer: fine) { .sh-it.on .sh-v { cursor: grab; } }
+/* ---------- carga ---------- */
+.sk { background: var(--bg3); }
+.sk.r169 { width: 100%; }
+
+@media (max-width: 1099px) { .feed { --cols: 3; --vis: 5; } dialog.watch .panel { --side: 320px; } }
+@media (max-width: 759px) { .feed { --cols: 2; --vis: 3.4; } .feed > * + * { margin-top: 40px; } .hgrid { gap: 28px var(--gut); } }
+/* celular, como la app de YouTube: un video por línea, con la miniatura de borde a borde; cada 4 videos,
+   la fila de reels, que también llega a los bordes */
+@media (max-width: 599px) {
+  .feed { --cols: 1; --vis: 2.3; }
+  .feed > * + * { margin-top: 28px; }
+  .hgrid { gap: 24px; }
+  .hgrid .thumb { width: calc(100% + 2 * var(--gut)); margin-inline: calc(-1 * var(--gut)); }
+  .yt-m { margin-top: 10px; }
+  .yt-ttl { font-size: 14px; line-height: 20px; }
+  .yt-s { font-size: 12px; line-height: 18px; }
+  .shelf-h { font-size: 18px; line-height: 24px; margin-bottom: 12px; }
+  .work.v .yt-ttl { font-size: 14px; line-height: 20px; }
+  .work.v .yt-s { font-size: 12px; line-height: 18px; }
+  .foot { padding: 24px 20px calc(44px + env(safe-area-inset-bottom, 0px)); }   /* lugar para el cartel de prototipo */
+  .chips { margin: 0 calc(-1 * var(--gut)) 20px; }   /* de borde a borde, como en la app; el primero, al margen del canal */
+  .chip-r { margin: -4px 0; padding: 4px 16px; scroll-padding-inline: 16px; gap: 8px; }
+}
+/* celular y tablet, como la app de YouTube: el video queda quieto arriba y, separado por el margen chico,
+   se desliza todo lo de abajo, con su propia barra (el video no se mueve, así que la barra no lo acompaña),
+   con los otros videos al final, como las tarjetas del inicio */
+@media (max-width: 1000px) {
+  dialog.watch .panel { width: calc(100% - 2 * var(--frame)); height: calc(100% - 2 * var(--frame)); display: flex; flex-direction: column; gap: var(--gut); overflow: hidden; padding: 0; }
+  .w-main { display: contents; }
+  .w-main .stage { position: relative; z-index: 3; }
+  .w-body { display: block; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding-bottom: var(--gut); }
+  .w-t, .w-ch, .w-desc { margin-inline: var(--gut); }
+  .w-t { margin-top: 4px; font-size: 18px; line-height: 24px; }
+  .w-ch { flex-wrap: wrap; }
+  .w-stat { order: 3; flex-basis: 100%; align-items: flex-start; text-align: left; }   /* debajo del canal, como en la app */
+  .w-desc { min-height: 0; overflow: visible; }
+  .w-desc .d-txt { --lines: 3; }   /* cortada en tres renglones, con “…más” */
+  .w-side { display: block; padding: 20px var(--gut) 0; }
+  .w-sh { min-height: 0; padding: 0; }
+  .w-list { overflow: visible; cursor: auto; padding: 0; margin: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 36px var(--gut); }
+  .w-it { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .w-it-t { flex-direction: row; flex-wrap: wrap; column-gap: 10px; }   /* canal y views en una línea, como en la app */
+  .w-it-ttl { flex-basis: 100%; font-size: 16px; line-height: 22px; }
+  .w-it-s { font-size: 14px; line-height: 20px; }
+  .w-x { top: var(--gut); right: var(--gut); z-index: 5; background: rgba(11, 11, 10, .72); border-color: transparent; }
+}
+/* tablet o celular acostado: el video no pasa de un poco más de la mitad de la pantalla */
+@media (max-width: 1000px) and (orientation: landscape) {
+  .w-main .stage { width: min(100%, 62dvh * 16 / 9); box-shadow: 0 0 0 100vmax #000; clip-path: inset(0 -100vmax); }   /* centrado, con negro a los costados */
+}
+@media (max-width: 759px) { .w-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px var(--gut); } }
+@media (max-width: 599px) {
+  dialog.watch .panel { width: 100%; height: 100%; border: 0; }   /* en el celular, a pantalla completa, como la app */
+  .w-x { position: fixed; top: calc(var(--gut) + env(safe-area-inset-top, 0px)); }
+  .w-list { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .w-it { gap: 10px; }
+  .w-th { margin-inline: calc(-1 * var(--gut)); }   /* de borde a borde, como en el inicio */
+  .w-it-t { padding-right: 8px; }
+  .w-it-ttl { font-size: 14px; line-height: 20px; }
+  .w-it-s { font-size: 12px; line-height: 18px; }
+}
+/* tablet: sin lugar para el panel, la descripción va sobre el video, abajo, con el canal y el título */
+@media (max-width: 999px) {
+  dialog.shorts { --shV: min(100dvh - 2 * var(--peek) - 2 * var(--shGap), (100vw - 2 * var(--gut) - 68px) * 16 / 9); }
+  .sh-it { grid-template-columns: var(--shW) 56px; column-gap: 12px; margin-left: clamp(var(--gut), 50vw - var(--shW) / 2, 100vw - var(--shW) - 72px); }
+  .sh-act { display: flex; }   /* sin panel: los likes y las views vuelven al costado del video */
+  .sh-pan, .sh-nav { display: none; }
+  .sh-x { display: grid; }   /* sin la descripción al costado, cerrar vuelve arriba a la derecha */
+  .sh-info { display: block; }
+}
+/* celular, como Shorts en el celular: de a uno, a pantalla completa y de borde a borde; se pasan
+   deslizando para arriba o para abajo, y los botones van encima del video, a la derecha */
+@media (max-width: 599px) {
+  dialog.shorts { --peek: 0px; --shGap: 8px; --shV: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); --shW: 100vw; }
+  .sh-feed { top: env(safe-area-inset-top, 0px); bottom: env(safe-area-inset-bottom, 0px); padding: 0; }
+  .sh-it { position: relative; grid-template-columns: 100%; width: 100%; margin: 0 0 var(--shGap); scroll-margin-top: 0; }   /* al deslizar, un margen chico entre uno y otro */
+  .sh-it:not(.on) .sh-v { filter: none; }
+  .sh-info { padding: 120px 64px calc(var(--tx) + 8px) var(--tx); }
+  .sh-act { position: absolute; right: var(--gut); bottom: calc(var(--tx) + 8px); gap: 14px; }
+  .sh-i { background: rgba(11, 11, 10, .46); }
+  .sh-a { text-shadow: 0 1px 2px rgba(0, 0, 0, .7); }
+  .sh-x { top: calc(var(--gut) + env(safe-area-inset-top, 0px)); background: rgba(11, 11, 10, .72); border-color: transparent; }
+}
+@media (hover: none), (prefers-reduced-motion: reduce) {
+  .yt-av, .w-av, .sh-av, .ch-av { transform: none !important; }
+  .yt-av::after, .w-av::after, .sh-av::after, .ch-av::after { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page { scroll-behavior: auto; }
+  .work, .yt-av, .w-av, .sh-av, .ch-av, .w-it, .top, .sh-v, .sh-act, .sh-pan, .sh-info, .chip, .feed.swap { transition: none; animation: none; }
+  .chip-r { scroll-behavior: auto; }
+  dialog.dlg[open]::backdrop, dialog.watch[open] > .panel, dialog.shorts[open] > .sh-feed { animation: none; }
+}
+</style>
+</head>
+<body>
+<header class="top" id="topbar">
+  <a class="top-t" id="top-t" href="#pie">Sanguchito</a>
+  <nav class="top-links" id="top-links" aria-label="Discord, Instagram y YouTube"></nav>
+</header>
+
+<div class="page" id="page" tabindex="-1">
+<main id="top" lang="es">
+  <!-- el canal, como el encabezado de un canal de YouTube: sale de la config -->
+  <section class="ch" id="canal" aria-labelledby="ch-n">
+    <a class="ch-av" id="ch-av" target="_blank" rel="noopener" draggable="false" aria-label="El canal en YouTube"><img id="ch-img" alt=""></a>
+    <div class="ch-t">
+      <h1 class="ch-n" id="ch-n"></h1>
+      <p class="ch-s" id="ch-s"></p>
+      <p class="ch-d" id="ch-d"></p>
+      <p class="ch-l" id="ch-l"></p>
+    </div>
+  </section>
+  <section class="sec" id="trabajos" aria-labelledby="h-all">
+    <h2 class="sr" id="h-all">Trabajos</h2>
+    <!-- los temas, como los del inicio de YouTube: salen solos de los temas de los videos -->
+    <div class="chips" id="chips" hidden>
+      <button class="chip-a prev" type="button" tabindex="-1" aria-label="Temas anteriores"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.6 5.6 16 7l-5 5 5 5-1.4 1.4L8.2 12z" fill="currentColor"/></svg></i></button>
+      <div class="chip-r" id="chip-r" role="group" aria-label="Temas"></div>
+      <button class="chip-a next" type="button" tabindex="-1" aria-label="Más temas"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.4 18.4 8 17l5-5-5-5 1.4-1.4 6.4 6.4z" fill="currentColor"/></svg></i></button>
+    </div>
+    <div class="feed" id="all"></div>
+  </section>
+
+</main>
+
+<!-- pie -->
+<footer class="foot" id="pie" lang="es">
+  <p class="foot-c">© 2026 Lil Sanguchito · Datos: YouTube</p>
+</footer>
+</div>
+<div class="proto" aria-hidden="true">Prototipo · datos de ejemplo</div>
+
+<!-- V1 · Reproductor de horizontales: como la página de un video en YouTube -->
+<dialog class="dlg watch" id="dlgWatch" aria-labelledby="w-t">
+  <div class="panel" tabindex="-1" autofocus>
+    <div class="w-main" id="w-main">
+      <div class="stage h" id="w-stage"><img id="w-img" alt=""><span class="dur" id="w-dur"></span><button class="play" id="w-play" type="button" aria-label="Reproducir"><span>▶</span></button></div>
+      <div class="w-body" id="w-body">
+        <h2 class="w-t" id="w-t"></h2>
+        <div class="w-ch" id="w-ch"></div>
+        <div class="w-desc" id="w-desc"></div>
+      </div>
+    </div>
+    <aside class="w-side" aria-labelledby="w-more">
+      <div class="w-sh" id="w-more"></div>
+      <div class="w-list" id="w-list"></div>
+    </aside>
+    <button class="x w-x" type="button" data-close aria-label="Cerrar">✕</button>
+  </div>
+</dialog>
+
+<!-- V2 · Verticales: como Shorts y TikTok -->
+<dialog class="dlg shorts" id="dlgShorts" aria-label="Shorts, TikToks y reels">
+  <div class="sh-feed" id="sh-feed" tabindex="-1" autofocus></div>
+  <div class="sh-nav"><button type="button" data-sh="-1" aria-label="Anterior">↑</button><button type="button" data-sh="1" aria-label="Siguiente">↓</button></div>
+  <button class="x sh-x" type="button" data-close aria-label="Cerrar">✕</button>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/js/fontawesome.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/js/brands.min.js" defer></script>
+<script src="js/mock-data.js"></script>
+<script src="js/config.js"></script>
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
