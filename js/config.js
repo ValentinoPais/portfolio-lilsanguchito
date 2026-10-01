@@ -11,8 +11,8 @@
    description (los renglones en blanco separan párrafos) y links (las redes: id, label y url; un mail, mailto:). */
 window.SITE_CONFIG = {
   google: {
-    apiKey: '',    // ← la API key
-    sheetId: ''    // ← el ID de la planilla
+        apiKey: 'AIzaSyDEIWSBS07CjSpUK-wKk6TgWAx2VFbpn-Y',    // ← la API key
+        sheetId: '1HIMSyVnWBLQHUsHsOjV6xYKdg8XtWtl79fdkvPvxyF4'    // ← el ID de la planilla
   },
   mock: {
     title: 'Sanguchito',   // el título de la barra de arriba
