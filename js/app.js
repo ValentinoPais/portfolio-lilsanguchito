@@ -764,6 +764,41 @@
     MI.c = c; try { localStorage.setItem('portfolio-mini', c); } catch (x) {}
   }
   window.addEventListener('pointerup', miDrop); window.addEventListener('pointercancel', miDrop);
+  // En el celular, el video se baja con el dedo para achicarlo (como en la app de YouTube): agarrándolo de arriba
+  // (encima del reproductor YouTube se queda con los toques: arriba va una franja con una rayita) o tirando
+  // para abajo lo de abajo del video cuando está arriba de todo. Si se suelta antes, vuelve a su lugar.
+  (function () {
+    var panel = $('#dlgWatch .panel'), g = null;
+    panel.addEventListener('touchstart', function (e) {
+      g = null;
+      if (!stacked() || isMini() || e.touches.length !== 1) return;
+      var t = e.target, body = $('#w-body'), grab = !!t.closest('.w-grab');
+      if (!grab && !(body.contains(t) && body.scrollTop <= 0)) return;
+      g = { x: e.touches[0].clientX, y: e.touches[0].clientY, dy: 0, on: false, grab: grab };
+    }, { passive: true });
+    panel.addEventListener('touchmove', function (e) {
+      if (!g) return;
+      var dx = e.touches[0].clientX - g.x, dy = e.touches[0].clientY - g.y;
+      if (!g.on) {
+        if (!g.grab && (dy < -4 || Math.abs(dx) > Math.abs(dy))) { g = null; return; }   // para arriba o de costado: scroll de siempre
+        if (dy < 8) return;
+        g.on = true;
+      }
+      e.preventDefault();                                // ya es el gesto: lo de abajo no se desliza
+      g.dy = Math.max(0, dy);
+      panel.style.transform = 'translateY(' + g.dy.toFixed(1) + 'px)';
+      panel.style.opacity = (1 - Math.min(.45, g.dy / innerHeight)).toFixed(3);
+    }, { passive: false });
+    function end() {
+      var k = g; g = null;
+      if (!k || !k.on) return;
+      var op = panel.style.opacity || 1;
+      panel.style.transform = ''; panel.style.opacity = '';
+      if (k.dy > Math.min(140, innerHeight * .2)) return closeWatch();   // se achica (si suena) o se cierra
+      if (!still()) panel.animate([{ transform: 'translateY(' + k.dy + 'px)', opacity: op }, { transform: 'none', opacity: 1 }], { duration: 220, easing: EASE });
+    }
+    panel.addEventListener('touchend', end); panel.addEventListener('touchcancel', end);
+  })();
   WD.addEventListener('cancel', function (e) { if (sounding()) { e.preventDefault(); setTimeout(function () { reopen(true); }); } });   // Esc
 
   // ---------------- en la compu, también se scrollea arrastrando, como con el dedo ----------------
@@ -1088,6 +1123,7 @@
   // nuevo. En la barra, tocando el nombre vuelve arriba.
   (function () {
     var ch = $('#canal'), avw = $('#ch-avw'), nm = $('#ch-n'), G = null, raf = 0;
+    var BYCSS = !!(window.CSS && CSS.supports && CSS.supports('animation-timeline: scroll()'));   // la foto y el nombre los mueve el CSS
     var px = function (css) {                          // cuánto mide algo de CSS (la barra, la muesca del celular)
       var d = document.createElement('div'); d.style.cssText = 'position:absolute;visibility:hidden;height:' + css;
       document.body.appendChild(d); var h = d.offsetHeight; d.remove(); return h;
@@ -1100,6 +1136,9 @@
       G = { D: D, ax: avw.offsetLeft, ay: avw.offsetTop, as: avw.offsetWidth || 1, nx: nm.offsetLeft, ny: nm.offsetTop, k: k,
         tax: L, tay: mid - AV / 2, ts: AV, tnx: L + AV + 12, tny: mid - lh * k / 2 };
       ch.style.setProperty('--chD', D + 'px'); ch.style.setProperty('--chPR', (parseFloat(cs.paddingRight) || 16) + 'px');
+      var set = function (k, v) { ch.style.setProperty(k, v); };   // a dónde llegan la foto y el nombre (para el CSS que los mueve con el scroll)
+      set('--avxT', (G.tax - G.ax).toFixed(1) + 'px'); set('--avyT', (G.tay - G.ay).toFixed(1) + 'px'); set('--avsT', (G.ts / G.as).toFixed(4));
+      set('--nxT', (G.tnx - G.nx).toFixed(1) + 'px'); set('--nyT', (G.tny - G.ny).toFixed(1) + 'px'); set('--nsT', G.k.toFixed(4));
       paint();
     }
     function paint() {
@@ -1107,8 +1146,10 @@
       if (!G) return;
       var p = G.D ? Math.max(0, Math.min(1, PAGE.scrollTop / G.D)) : 0, q = function (a, b) { return a + (b - a) * p; };
       var set = function (k, v) { ch.style.setProperty(k, v); };
-      set('--avx', q(0, G.tax - G.ax).toFixed(1) + 'px'); set('--avy', q(0, G.tay - G.ay).toFixed(1) + 'px'); set('--avs', q(1, G.ts / G.as).toFixed(4));
-      set('--nx', q(0, G.tnx - G.nx).toFixed(1) + 'px'); set('--ny', q(0, G.tny - G.ny).toFixed(1) + 'px'); set('--ns', q(1, G.k).toFixed(4));
+      if (!BYCSS) {                                   // sin eso, se mueven desde acá
+        set('--avx', q(0, G.tax - G.ax).toFixed(1) + 'px'); set('--avy', q(0, G.tay - G.ay).toFixed(1) + 'px'); set('--avs', q(1, G.ts / G.as).toFixed(4));
+        set('--nx', q(0, G.tnx - G.nx).toFixed(1) + 'px'); set('--ny', q(0, G.tny - G.ny).toFixed(1) + 'px'); set('--ns', q(1, G.k).toFixed(4));
+      }
       set('--chR', Math.max(0, 1 - p * 2.2).toFixed(3));                       // lo demás se apaga primero
       set('--chB', Math.max(0, Math.min(1, (p - .55) / .45)).toFixed(3));       // el fondo de barra, al final
       set('--chI', Math.max(0, Math.min(1, (p - .7) / .3)).toFixed(3));         // los íconos, al final
