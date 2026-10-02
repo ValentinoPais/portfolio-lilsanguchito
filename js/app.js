@@ -197,8 +197,14 @@
   var MAXV = 1600;                                         // px por segundo: el envión más fuerte
   var lastTab = 0;                                         // cuándo se apretó Tab por última vez
   document.addEventListener('keydown', function (e) { if (e.key === 'Tab') lastTab = Date.now(); }, true);
-  var belts = [], scrolling = 0;                          // un solo cuadro de animación para todas las filas
-  requestAnimationFrame(function frame(now) { belts.forEach(function (f) { f(now); }); requestAnimationFrame(frame); });
+  var belts = [], scrolling = 0, HELD = 0, modal = false; // un solo cuadro de animación para todas las filas
+  var DLGS = document.getElementsByTagName('dialog');     // (siempre al día: mirar si hay una ventana abierta es barato)
+  requestAnimationFrame(function frame(now) {
+    modal = false;                                         // una ventana abierta (no el mini): las filas de la página, quietas
+    for (var i = 0; i < DLGS.length; i++) if (DLGS[i].open && DLGS[i].classList.contains('dlg') && !DLGS[i].classList.contains('mini')) modal = true;
+    belts.forEach(function (f) { f(now); });
+    requestAnimationFrame(frame);
+  });
   PAGE.addEventListener('scroll', function () { scrolling = performance.now() + 250; }, { passive: true });   // mientras se desliza la página, las filas esperan: va más liviano
   function carousel(track, n) {
     // A cada lado de los videos va una copia de la tanda completa. Cuando la fila entra en la zona de
@@ -207,15 +213,15 @@
     var car = track.parentNode;
     var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     var dir = n % 2 ? -1 : 1;                          // para qué lado va: se alterna de una fila a la otra
-    var focused = false, inView = false, drag = null, moved = false;
+    var focused = false, inView = false, drag = null, moved = false, inDlg = null;
     var originals = [].slice.call(track.children), looped = false, start = 0, setW = 0, idx = 0;
     var v = dir * SPEED, pos = 0, running = false, last = 0;
     var pad = function () { return parseFloat(getComputedStyle(track).paddingLeft) || 0; };
     var max = function () { return track.scrollWidth - track.clientWidth; };
     var posOf = function (el) { return el.offsetLeft - pad(); };
     function nearest(x) {
-      var best = 0, d = Infinity;
-      [].forEach.call(track.children, function (el, i) { var dd = Math.abs(posOf(el) - x); if (dd < d) { d = dd; best = i; } });
+      var best = 0, d = Infinity, p = pad();
+      [].forEach.call(track.children, function (el, i) { var dd = Math.abs(el.offsetLeft - p - x); if (dd < d) { d = dd; best = i; } });
       return best;
     }
     function current() {                               // qué video original está primero a la vista
@@ -266,7 +272,8 @@
     var belt = function (now) {                        // cada cuadro: avanza, y el envión se apaga suave
       var dt = last ? Math.min(50, now - last) : 16;
       last = now;
-      if (!looped || reduce || document.hidden || window.__snap || now < scrolling || focused || (drag && drag.on) || wh.on || (!track.closest('dialog') && document.querySelector('dialog.dlg[open]:not(.mini)'))) return halt();   // con una ventana abierta, las de la página quietas
+      if (inDlg === null && track.isConnected) inDlg = !!track.closest('dialog');   // si está en una ventana (se mira una vez)
+      if (!looped || reduce || document.hidden || window.__snap || now < scrolling || focused || (drag && drag.on) || wh.on || HELD || (!inDlg && modal)) return halt();   // con una ventana abierta, las de la página quietas; arrastrando algo, todas
       if (!inView) { halt(); v = dir * SPEED; return; }   // fuera de la pantalla espera, ya a su velocidad
       if (!running) { running = true; pos = track.scrollLeft; }
       v = dir * SPEED + (v - dir * SPEED) * Math.exp(-dt / GLIDE);
@@ -295,7 +302,8 @@
       clearTimeout(wh.timer);
       wh.timer = setTimeout(function () { wh.on = false; push(wh.v); }, 80);
     }, { passive: false });
-    track.addEventListener('scroll', function () { idx = current(); }, { passive: true });
+    var seen = 0;                                      // cuál va primero (para cuando cambia el ancho): unas veces por segundo
+    track.addEventListener('scroll', function () { if (!seen) seen = setTimeout(function () { seen = 0; idx = current(); }, 200); }, { passive: true });
     // arrastrar de costado, con el mouse o con el dedo: se engancha recién después de 7 px y solo de costado,
     // así un clic o un toque siguen abriendo el video y para arriba o para abajo se mueve la página (el dedo
     // también: la fila deja la página al navegador y lo de costado lo maneja ella, con su envión)
@@ -474,6 +482,7 @@
       for (var i = 0; i < live.length; i++) if (live[i].w === w) { var s = live[i]; s.on = false; s.trx = s.tRy = 0; s.tsc = 1; }
     };
     var follow = function (x, y) {
+      if (document.documentElement.classList.contains('grabbing')) { if (hot) { drop(hot); hot = null; } return; }   // arrastrando la página: nada (así va liviano)
       var el = document.elementFromPoint(x, y), w = el && el.closest ? el.closest(AV) : null;
       if (!w && hot && hot.isConnected && el && el.closest && el.closest('dialog') === hot.closest('dialog') && inside(hot, x, y)) w = hot;   // inclinada, sigue siendo la misma hasta salir de su círculo quieto
       if (w && !inside(w, x, y)) w = null;             // solo sobre la foto: el nombre y el resto no cuentan
@@ -520,6 +529,7 @@
   function show(d) { if (d.open) return; try { d.showModal(); } catch (e) { d.setAttribute('open', ''); } }
   var EASE = 'cubic-bezier(.2, .8, .2, 1)';
   var still = function () { return matchMedia('(prefers-reduced-motion: reduce)').matches; };
+  var fadeAt = function (p) { return Math.max(.25, 1 - .6 * Math.max(0, p)); };   // lo que se arrastra para irse se va difuminando: justo en el tramo, al 40 %
   var full = new Intl.NumberFormat('es-AR');
   var linkify = function (s) { return esc(s).replace(/https?:\/\/[^\s<]+/g, function (u) { return '<a href="' + u + '" target="_blank" rel="noopener">' + u + '</a>'; }); };
   var channelBlock = function (w) {                    // foto, nombre y suscriptores; abre el canal
@@ -1359,7 +1369,7 @@
     var dx = e.clientX - g.x, dy = e.clientY - g.y;
     if (!MI.moved) {
       if (Math.abs(dx) + Math.abs(dy) < 6) return;
-      MI.moved = true; document.documentElement.classList.add('grabbing'); noSel();
+      MI.moved = true; HELD = 1; document.documentElement.classList.add('grabbing'); noSel();
       WD.getAnimations().forEach(function (a) { a.cancel(); });
     }
     dx = Math.max(-g.r.left, Math.min(innerWidth - g.r.right, dx)); dy = Math.max(-g.r.top, Math.min(innerHeight - g.r.bottom, dy));
@@ -1368,7 +1378,7 @@
   function miDrop() {
     var g = MI.drag; MI.drag = null;
     if (!g || !MI.moved) return;
-    MI.moved = false; MI.swallow = true; setTimeout(function () { MI.swallow = false; });   // el clic de soltar no lo agranda
+    MI.moved = false; HELD = 0; MI.swallow = true; setTimeout(function () { MI.swallow = false; });   // el clic de soltar no lo agranda
     document.documentElement.classList.remove('grabbing');
     var a = WD.getBoundingClientRect(), c = (a.top + a.height / 2 < innerHeight / 2 ? 't' : 'b') + (a.left + a.width / 2 < innerWidth / 2 ? 'l' : 'r');
     WD.style.transform = ''; miCorner(c);
@@ -1377,26 +1387,51 @@
     MI.c = c; try { localStorage.setItem('portfolio-mini', c); } catch (x) {}
   }
   window.addEventListener('pointerup', miDrop); window.addEventListener('pointercancel', miDrop); window.addEventListener('blur', miDrop);   // también si se va de la ventana arrastrándolo
-  // el mini, en el celular, como en la app: se baja con el dedo para cerrarlo y se sube para agrandarlo. Mientras
-  // tanto sigue al dedo; al soltar, pasado un tramo, se cierra o se agranda y, si no, vuelve rápido
+  // el mini, en el celular, como en la app: se baja con el dedo para cerrarlo y se sube para agrandarlo. Para abajo
+  // baja, difuminándose; para arriba se estira (pegado abajo, sin hueco) y el video se difumina, hasta un tope: cuando
+  // ya no se estira más, soltándolo se agranda. Si se suelta antes, vuelve rápido
   (function () {
-    var p = $('#dlgWatch .panel'), g = null;
-    p.addEventListener('pointerdown', function (e) { if (isMini() && stacked() && !e.target.closest('.mi-b')) g = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false, dy: 0, top: p.getBoundingClientRect().top }; });
+    var p = $('#dlgWatch .panel'), g = null, kids = [$('#w-stage'), $('#w-mini')];
+    var cap = function () { return Math.min(96, innerHeight * .12); };   // el tope del estirón
+    var pull = function (d) { var c = cap(), k = .75 * c; return d <= k ? d : Math.min(c, k + (d - k) * .5); };   // sigue al dedo y, cerca del tope, se pone duro
+    var fade = function (o) { kids.forEach(function (el) { el.style.opacity = o; }); };
+    p.addEventListener('pointerdown', function (e) { if (isMini() && stacked() && !e.target.closest('.mi-b')) g = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false, dy: 0, raf: 0 }; });
     p.addEventListener('pointermove', function (e) {
       if (!g || e.pointerId !== g.id) return;
       var dx = e.clientX - g.x, dy = e.clientY - g.y;
-      if (!g.on) { if (Math.abs(dy) < 8 || Math.abs(dx) > Math.abs(dy)) return; g.on = true; try { p.setPointerCapture(e.pointerId); } catch (x) {} p.getAnimations().forEach(function (a) { a.cancel(); }); }
-      g.dy = Math.max(-g.top, dy);                    // para arriba, como mucho hasta arriba de todo
-      p.style.transform = 'translateY(' + g.dy.toFixed(1) + 'px)'; p.style.opacity = String(Math.max(.25, 1 - Math.max(0, g.dy) / 140));
+      if (!g.on) { if (Math.abs(dy) < 8 || Math.abs(dx) > Math.abs(dy)) return; g.on = true; HELD = 1; try { p.setPointerCapture(e.pointerId); } catch (x) {} p.getAnimations().forEach(function (a) { a.cancel(); }); }
+      g.dy = dy;
+      var k = g;
+      if (!k.raf) k.raf = requestAnimationFrame(function () {   // una vez por cuadro
+        k.raf = 0; if (g !== k) return;
+        if (k.dy < 0) {                                 // para arriba: se estira
+          var s = pull(-k.dy);
+          p.style.transform = ''; p.style.opacity = ''; p.style.paddingTop = s.toFixed(1) + 'px'; fade(fadeAt(s / cap()).toFixed(3));
+        } else {                                        // para abajo: baja
+          p.style.paddingTop = ''; fade(''); p.style.transform = 'translateY(' + k.dy.toFixed(1) + 'px)'; p.style.opacity = String(Math.max(.25, 1 - k.dy / 140));
+        }
+      });
     });
     function up() {
       var k = g; g = null;
       if (!k || !k.on) return;
+      if (k.raf) cancelAnimationFrame(k.raf);
+      HELD = 0;
       MI.swallow = true; setTimeout(function () { MI.swallow = false; });   // el clic de soltar no lo agranda ni lo pausa
-      var clear = function () { p.style.transform = ''; p.style.opacity = ''; };
-      if (k.dy <= -48) { clear(); return reopen(false); }   // para arriba, pasado el tramo: se agranda, como tocándolo
-      if (k.dy < 36) { clear(); if (!still()) p.animate([{ transform: 'translateY(' + k.dy + 'px)' }, { transform: 'none' }], { duration: 140, easing: EASE }); return; }   // si no, vuelve rápido
+      var clear = function () { p.style.transform = ''; p.style.opacity = ''; p.style.paddingTop = ''; fade(''); };
+      if (k.dy < 0) {
+        var s = pull(-k.dy), o = fadeAt(s / cap());
+        clear();
+        if (s >= cap() - .5) return reopen(false);      // en el tope: se agranda
+        if (!still()) {                                 // si no, vuelve rápido
+          p.animate([{ paddingTop: s + 'px' }, { paddingTop: '0px' }], { duration: 140, easing: EASE });
+          kids.forEach(function (el) { el.animate([{ opacity: o }, { opacity: 1 }], { duration: 140, easing: EASE }); });
+        }
+        return;
+      }
+      if (k.dy < 36) { clear(); if (!still()) p.animate([{ transform: 'translateY(' + k.dy + 'px)', opacity: Math.max(.25, 1 - k.dy / 140) }, { transform: 'none', opacity: 1 }], { duration: 140, easing: EASE }); return; }   // si no, vuelve rápido
       if (still()) { clear(); return WD.close(); }
+      p.style.opacity = String(Math.max(.25, 1 - k.dy / 140));
       p.animate([{ transform: 'translateY(' + k.dy + 'px)', opacity: p.style.opacity }, { transform: 'translateY(110%)', opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' })
         .finished.then(function (an) { WD.close(); clear(); an.cancel(); }, clear);
     }
@@ -1432,7 +1467,7 @@
       if (isMini() || (e.pointerType === 'mouse' && e.button !== 0)) return;
       g = { id: e.pointerId, x: e.clientX, y: e.clientY, dy: 0, on: false, up: false, mouse: e.pointerType === 'mouse', btn: !!e.target.closest('button') };
     });
-    // Mientras se arrastra, la ventana sigue al dedo (una vez por cuadro, solo para abajo). Al soltar, sin pasos
+    // Mientras se arrastra, la ventana sigue al dedo (una vez por cuadro, solo para abajo), difuminándose. Al soltar, sin pasos
     // intermedios: pasado el tramo, al toque queda el mini (o se cierra); si no, vuelve rápido a su lugar
     stage.addEventListener('pointermove', function (e) {
       if (!g || e.pointerId !== g.id) return;
@@ -1440,7 +1475,7 @@
       if (!g.on) {
         if (Math.abs(dy) < 10 || Math.abs(dx) > Math.abs(dy)) return;
         if (dy < 0) { g.up = stacked() && dy < -40; return; }   // para arriba (en el celular): pantalla completa, al soltar
-        g.on = true; g.free = !stacked(); ui(false); panel.style.willChange = 'transform'; panel.classList.add('w-drag');
+        g.on = true; g.free = !stacked(); HELD = 1; ui(false); panel.style.willChange = 'transform, opacity'; panel.classList.add('w-drag');
         try { stage.setPointerCapture(e.pointerId); } catch (x) {}
         panel.getAnimations().forEach(function (x) { x.cancel(); });
         if (g.free) { document.documentElement.classList.add('grabbing'); noSel(); }   // en la compu, la ventana entera sigue al mouse
@@ -1450,11 +1485,12 @@
       if (!k.raf) k.raf = requestAnimationFrame(function () {
         k.raf = 0; if (g !== k) return;
         panel.style.transform = 'translate(' + k.dx.toFixed(1) + 'px,' + k.dy.toFixed(1) + 'px)';
+        panel.style.opacity = fadeAt(k.dy / reach()).toFixed(3);   // el video, cada vez más difuminado
         WD.style.setProperty('--bd', Math.max(0, 1 - k.dy / reach()).toFixed(3));   // el fondo, cada vez más claro: transparente justo en el tramo (soltándolo ahí, se achica)
       });
     });
     var reach = function () { return Math.min(140, innerHeight * .2); };   // el tramo: pasándolo, al soltar se achica
-    function clear() { panel.style.transform = ''; panel.style.transformOrigin = ''; panel.style.willChange = ''; panel.classList.remove('w-drag'); document.documentElement.classList.remove('grabbing'); WD.style.removeProperty('--bd'); }
+    function clear() { HELD = 0; panel.style.transform = ''; panel.style.opacity = ''; panel.style.transformOrigin = ''; panel.style.willChange = ''; panel.classList.remove('w-drag'); document.documentElement.classList.remove('grabbing'); WD.style.removeProperty('--bd'); }
     function drop() {                                 // en el celular: al toque queda el mini (con el video cargado) o se cierra
       clear();
       closeWatch();
@@ -1463,9 +1499,9 @@
     function fly(k) {
       MI.swallow = true; setTimeout(function () { MI.swallow = false; });   // el clic de soltar no lo agranda
       if (still()) { clear(); return closeWatch(); }
-      var from = 'translate(' + k.dx.toFixed(1) + 'px,' + k.dy.toFixed(1) + 'px)';
+      var from = 'translate(' + k.dx.toFixed(1) + 'px,' + k.dy.toFixed(1) + 'px)', o = fadeAt(k.dy / reach());   // sale de como se soltó: difuminado
       if (!hasVideo()) {
-        var p = panel.getBoundingClientRect(), an = panel.animate([{ transform: from }, { transform: 'translate(' + k.dx.toFixed(1) + 'px,' + (innerHeight - p.top + k.dy).toFixed(1) + 'px)' }], { duration: 220, easing: EASE, fill: 'forwards' });
+        var p = panel.getBoundingClientRect(), an = panel.animate([{ transform: from, opacity: o }, { transform: 'translate(' + k.dx.toFixed(1) + 'px,' + (innerHeight - p.top + k.dy).toFixed(1) + 'px)', opacity: 0 }], { duration: 220, easing: EASE, fill: 'forwards' });
         return an.finished.then(function () { an.cancel(); clear(); closeWatch(); }, function () {});
       }
       var a = stage.getBoundingClientRect();
@@ -1473,7 +1509,7 @@
       var b = stage.getBoundingClientRect(), q = panel.getBoundingClientRect(), done = function () { panel.style.transformOrigin = ''; };
       if (!b.width) return;
       panel.style.transformOrigin = (b.left - q.left).toFixed(1) + 'px ' + (b.top - q.top).toFixed(1) + 'px';   // el video del mini sale de donde se soltó el grande
-      panel.animate([{ transform: 'translate(' + (a.left - b.left).toFixed(1) + 'px,' + (a.top - b.top).toFixed(1) + 'px) scale(' + (a.width / b.width).toFixed(4) + ')' }, { transform: 'none' }],
+      panel.animate([{ transform: 'translate(' + (a.left - b.left).toFixed(1) + 'px,' + (a.top - b.top).toFixed(1) + 'px) scale(' + (a.width / b.width).toFixed(4) + ')', opacity: o }, { transform: 'none', opacity: 1 }],
         { duration: 220, easing: EASE }).finished.then(done, done);
       var mu = WD.querySelector('.mini-ui');
       if (mu) mu.animate([{ opacity: 0 }, { opacity: 0, offset: .5 }, { opacity: 1 }], { duration: 220 });
@@ -1511,6 +1547,7 @@
     function up(e) {
       var k = g; g = null;
       if (!k) return;
+      HELD = 0;
       if (k.raf) cancelAnimationFrame(k.raf);
       if (!k.on) {
         if (e.type !== 'pointerup') return;
@@ -1523,7 +1560,7 @@
         return k.free ? fly(k) : drop();
       }
       clear();
-      if (!still()) panel.animate([{ transform: 'translate(' + k.dx + 'px,' + k.dy + 'px)' }, { transform: 'none' }], { duration: 140, easing: EASE });   // vuelve rápido
+      if (!still()) panel.animate([{ transform: 'translate(' + k.dx + 'px,' + k.dy + 'px)', opacity: fadeAt(k.dy / reach()) }, { transform: 'none', opacity: 1 }], { duration: 140, easing: EASE });   // vuelve rápido
     }
     stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
     // si se va de la ventana arrastrando (alt-tab), se resuelve en el acto, como si lo soltara ahí
@@ -1554,7 +1591,7 @@
       return document.querySelector('dialog[open]') || !page.contains(t) ? null : page;   // la barra de arriba no arrastra nada
     }
     var get = function (el) { return el.scrollTop; };
-    var set = function (el, y) { el.scrollTop = y; };
+    var set = function (el, y) { try { el.scrollTo({ top: y, behavior: 'instant' }); } catch (x) { el.scrollTop = y; } };
     function settle() {                                // terminó: la página vuelve a su scroll suave
       cancelAnimationFrame(raf); raf = 0;
       page.style.removeProperty('scroll-behavior');
@@ -1585,7 +1622,8 @@
         try { d.el.setPointerCapture(e.pointerId); } catch (x) {}
         return;
       }
-      set(d.el, d.top - (e.clientY - d.y));
+      d.to = d.top - (e.clientY - d.y);                // se aplica una vez por cuadro
+      if (!d.f) { var k = d; k.f = requestAnimationFrame(function () { k.f = 0; set(k.el, k.to); }); }
       d.v = 0.8 * d.v + 0.2 * ((e.clientY - d.ly) / Math.max(1, now - d.lt));   // px por ms
       d.ly = e.clientY; d.lt = now;
     });
@@ -1593,6 +1631,7 @@
       if (!d || (e && e.pointerId !== d.id)) return;
       var g = d; d = null;
       if (!g.on) return;
+      if (g.f) { cancelAnimationFrame(g.f); g.f = 0; set(g.el, g.to); }   // lo último que se movió
       html.classList.remove('grabbing');
       setTimeout(function () { moved = false; }, 0);  // el clic que viene al soltar no cuenta
       if (reduce || Math.abs(g.v) < 0.05) return settle();
@@ -1660,8 +1699,8 @@
     SH.items.forEach(function (el, n) { var x = Math.abs(el.offsetTop - top); if (x < dd) { dd = x; best = n; } });
     return best;
   }
-  function shActive(n) {
-    if (n === SH.i) return;
+  function shActive(n, moving) {
+    if (n === SH.i) { if (SH.wait && !moving) shLoad(); return; }
     var prev = SH.items[SH.i];
     if (prev) {                                            // el que se va deja de sonar
       prev.classList.remove('on'); clearTimeout(RT.timer);
@@ -1673,32 +1712,45 @@
     var it = SH.items[n];
     if (!it) return;
     it.classList.add('on');
+    var btns = SH.d.querySelectorAll('.sh-nav button');
+    btns[0].disabled = n === 0;                          // el de bajar, en el último, cierra
+    SB();
+    SH.wait = true;
+    if (!moving) shLoad();
+  }
+  // lo pesado, recién con el vertical quieto (mientras se desliza, el celular va liviano): que suene el que quedó, que
+  // se descarguen los lejos y que se precarguen los de al lado, de a uno y nunca mientras se desliza
+  function shLoad() {
+    SH.wait = false;
+    var n = SH.i, it = SH.items[n];
+    if (!it) return;
     reelGo(it);                                          // el que queda en pantalla arranca solo
     SH.items.forEach(function (x, k) { if (k < n - 1 || k > n + 2) stopHere(x.querySelector('.sh-v')); });   // los lejos se descargan
     var q = [n + 1, n + 2, n - 1];                       // los dos de abajo y el de arriba, listos: de a uno, así primero
     clearTimeout(SH.pre); SH.pre = setTimeout(function step() {   // carga el que se ve y el celular no se atraganta
       if (SH.i !== n) return;
+      if (performance.now() - (SH.moved || 0) < 400) { SH.pre = setTimeout(step, 400); return; }   // deslizando: después
       var made = false;
       while (q.length && !made) made = reelPre(SH.items[q.shift()]);
       if (q.length) SH.pre = setTimeout(step, made ? 1200 : 0);
     }, 400);
-    var btns = SH.d.querySelectorAll('.sh-nav button');
-    btns[0].disabled = n === 0;                          // el de bajar, en el último, cierra
-    SB();
   }
   function shGo(n, fast) {
     if (n > SH.items.length - 1 && SH.items.length) return SH.d.close();   // después del último: se cierra y queda la página donde estaba
     n = Math.max(0, n);
     SH.feed.scrollTo({ top: SH.items[n].offsetTop - SH.mt, behavior: still() || fast ? 'auto' : 'smooth' });
   }
-  var shTick = false;
+  var shTick = false, shRest = 0;
   SH.feed.addEventListener('scroll', function () {
+    SH.moved = performance.now();
+    clearTimeout(shRest); shRest = setTimeout(function () { shActive(shIndex()); }, 250);   // quieto (por si el navegador no avisa que terminó)
     if (shTick) return;
     shTick = true;
-    requestAnimationFrame(function () { shTick = false; shActive(shIndex()); });
+    requestAnimationFrame(function () { shTick = false; shActive(shIndex(), true); });
   }, { passive: true });
+  SH.feed.addEventListener('scrollend', function () { clearTimeout(shRest); shActive(shIndex()); });   // terminó de deslizarse: que suene
   // deslizando el vertical de costado (con el dedo, para un lado o el otro) se cierra, como el horizontal para abajo:
-  // sigue al dedo solo el que está en pantalla (los que asoman arriba y abajo quedan quietos) y el fondo se va
+  // sigue al dedo solo el que está en pantalla, difuminándose (los que asoman arriba y abajo quedan quietos), y el fondo se va
   // aclarando; cuando ya no se ve (en el tramo), soltándolo se cierra y, si no, vuelve. Generoso: un roce de costado
   // no cuenta, y para arriba o para abajo pasa al otro vertical
   (function () {
@@ -1722,7 +1774,7 @@
       var k = hz;
       if (!k.raf) k.raf = requestAnimationFrame(function () {
         k.raf = 0; if (hz !== k) return;
-        k.it.style.transform = 'translateX(' + k.dx.toFixed(1) + 'px)';
+        k.it.style.transform = 'translateX(' + k.dx.toFixed(1) + 'px)'; k.it.style.opacity = fadeAt(Math.abs(k.dx) / far()).toFixed(3);
         SH.d.style.setProperty('--bd', Math.max(0, 1 - Math.abs(k.dx) / far()).toFixed(3));   // transparente justo en el tramo
       });
     });
@@ -1732,9 +1784,9 @@
       if (k.raf) cancelAnimationFrame(k.raf);
       if (!k.on) return;
       swallow = true; setTimeout(function () { swallow = false; });   // soltarlo no pausa
-      k.it.style.transform = ''; SH.d.style.removeProperty('--bd'); SH.d.classList.remove('sh-drag');
+      k.it.style.transform = ''; k.it.style.opacity = ''; SH.d.style.removeProperty('--bd'); SH.d.classList.remove('sh-drag');
       if (Math.abs(k.dx) >= far()) return SH.d.close();   // pasado el tramo: se cierra, al toque
-      if (!still()) k.it.animate([{ transform: 'translateX(' + k.dx + 'px)' }, { transform: 'none' }], { duration: 140, easing: EASE });   // si no, vuelve rápido
+      if (!still()) k.it.animate([{ transform: 'translateX(' + k.dx + 'px)', opacity: fadeAt(Math.abs(k.dx) / far()) }, { transform: 'none', opacity: 1 }], { duration: 140, easing: EASE });   // si no, vuelve rápido
     }
     SH.feed.addEventListener('pointerup', end); SH.feed.addEventListener('pointercancel', end);
     SH.feed.addEventListener('lostpointercapture', function (e) { if (hz && hz.on && e.target === hz.it && e.pointerId === hz.id) end(); });
@@ -2000,9 +2052,11 @@
       knob.style.transform = 'translateY(' + ((H - kh) * sc.scrollTop / m).toFixed(1) + 'px)';
     }
     var later = function () { if (!raf) raf = requestAnimationFrame(function () { raf = 0; size(); }); };
-    host.addEventListener('scroll', function (e) {     // también si se mueve lo de afuera (los verticales)
+    host.addEventListener('scroll', function (e) {     // también si se mueve lo de afuera (los verticales); lo de al lado (los tags), no
+      var s = get();
+      if (s && e.target !== s && !(e.target.contains && e.target.contains(s))) return;
       later();
-      if (e.target !== get()) return;
+      if (e.target !== s) return;
       rail.classList.add('on');
       clearTimeout(nap); nap = setTimeout(function () { rail.classList.remove('on'); }, 900);
     }, true);

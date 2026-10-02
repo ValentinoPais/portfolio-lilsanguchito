@@ -59,15 +59,22 @@ img { display: block; max-width: 100%; }
 .lab { display: block; font: 500 11px/1.2 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 
 /* ---------- pantalla de carga ----------
-   Mientras llegan los datos (la planilla y YouTube): el nombre y, debajo, una barrita violeta que va y viene.
-   Cuando la página está lista (con la foto del canal y las primeras miniaturas), se apaga suave */
+   Mientras llegan los datos (la planilla y YouTube): un play violeta que late, con un aro alrededor que gira (como
+   un video cargando), y el nombre debajo. Se mueve en su propia capa: no se traba aunque la página esté ocupada
+   armándose. Cuando la página está lista (con la foto del canal y las primeras miniaturas), se agranda un toque y
+   se apaga suave */
 .carga { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: var(--bg); transition: opacity .45s ease, visibility 0s linear .45s; }
 .carga.out { opacity: 0; visibility: hidden; pointer-events: none; }
-.carga-in { display: grid; justify-items: center; gap: 18px; padding: 16px; }
-.carga b { font: 700 28px/1.2 var(--sans); letter-spacing: -.01em; color: var(--text); }
-.carga i { position: relative; width: 168px; height: 3px; overflow: hidden; border-radius: 2px; background: rgba(236, 234, 228, .12); }
-.carga i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 40%; border-radius: 2px; background: var(--acc); animation: carga 1.1s cubic-bezier(.45, 0, .55, 1) infinite; }
-@keyframes carga { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+.carga-in { display: grid; justify-items: center; gap: 22px; padding: 16px; transition: transform .45s cubic-bezier(.2, .8, .2, 1); }
+.carga.out .carga-in { transform: scale(1.08); }
+.carga-p { position: relative; width: 76px; height: 76px; }
+.carga-p::before, .carga-p::after { content: ""; position: absolute; inset: 0; border: 3px solid rgba(236, 234, 228, .1); border-radius: 50%; }   /* el aro, apenas */
+.carga-p::after { border-color: var(--acc) transparent transparent; animation: carga-giro 1s cubic-bezier(.55, .2, .45, .8) infinite; }   /* y su parte violeta, girando */
+.carga-p i { position: absolute; inset: 0; display: grid; place-items: center; color: var(--acc); animation: carga-late 1.3s ease-in-out infinite; }   /* el play, latiendo */
+.carga-p svg { width: 34px; height: 34px; }
+.carga b { font: 700 24px/1.2 var(--sans); letter-spacing: -.01em; color: var(--text); }
+@keyframes carga-giro { to { transform: rotate(360deg); } }
+@keyframes carga-late { 0%, 55%, 100% { transform: scale(1); } 18% { transform: scale(1.16); } 34% { transform: scale(.93); } }
 
 /* ---------- las redes del canal (Instagram, Discord y el correo): íconos en violeta, arriba a la derecha ---------- */
 .top-links { display: flex; gap: var(--gut); }
@@ -233,7 +240,8 @@ dialog.dlg[open] { display: grid; place-items: center; }
 dialog.watch { overflow: hidden; }   /* arrastrando el reproductor, no aparecen barras de scroll */
 dialog.watch:has(.panel.w-drag) > .sbar { opacity: 0; }
 dialog.watch:has(.panel.w-drag)::backdrop { transition: none; }   /* arrastrando, el fondo sigue al dedo; al volver, se oscurece rápido */   /* ni la de la lista, que queda quieta */
-dialog.dlg::backdrop { opacity: var(--bd, 1); transition: opacity .14s; background: var(--shade); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }   /* igual en las dos ventanas */
+@property --bd { syntax: '<number>'; inherits: false; initial-value: 1; }   /* el fondo mientras se arrastra: solo lo lee el fondo, así cambiarlo es liviano */
+dialog.dlg::backdrop { --bd: inherit; opacity: var(--bd, 1); transition: opacity .14s; background: var(--shade); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }   /* igual en las dos ventanas */
 dialog.watch .panel:focus, .sh-feed:focus { outline: none; }   /* al abrir, el foco va a la ventana: Tab lleva al play */
 .panel { width: min(1080px, 100% - 2 * var(--gut)); max-height: calc(100% - 2 * var(--gut)); overflow: auto; background: var(--bg2); border: 1px solid var(--line); padding: var(--gut); overscroll-behavior: contain; }
 .x { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line); font: 400 14px/1 var(--sans); }   /* cerrar: redondo */
@@ -256,6 +264,11 @@ dialog.dlg[open]::backdrop { animation: fade-in .22s ease-out; }
   .ch::after { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(11, 11, 10, .96); }
   dialog.dlg::backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }
   .yt-av::after, .w-av::after, .sh-av::after, .ch-av::after { display: none; }
+  dialog.watch[open]:not(.mini) > .panel { will-change: transform, opacity; }   /* la ventana, ya en su capa: arrastrarla no la vuelve a dibujar */
+  .sh-v { transition: none; }
+  .sh-it:not(.on) .sh-v { filter: none; }   /* los que asoman, oscurecidos con una capa encima: un filtro sobre el video pesa */
+  .sh-v::after { content: ""; position: absolute; inset: 0; z-index: 9; background: #000; opacity: 0; transition: opacity .4s; pointer-events: none; }
+  .sh-it:not(.on) .sh-v::after { opacity: .45; }
 }
 dialog.watch[open] > .panel, dialog.shorts[open] > .sh-feed { animation: pop-in .26s cubic-bezier(.2, .8, .2, 1); }
 /* video horizontal: como la página de un video en YouTube. A la izquierda el video y sus datos; a la
@@ -639,14 +652,14 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
   .thumb img, .w-th img, .stage img, .sh-v img, .yt-av img, .w-av img, .sh-av img, .ch-av img, #canal.in, #trabajos.in, .w-t::after { transition: none; animation: none; }
   .chip-r { scroll-behavior: auto; }
   dialog.dlg[open]::backdrop, dialog.watch[open] > .panel, dialog.shorts[open] > .sh-feed { animation: none; }
-  .carga { transition: none; }
-  .carga i::after { animation: none; width: 100%; opacity: .6; }
+  .carga, .carga-in { transition: none; }
+  .carga-p::after, .carga-p i { animation: none; }
 }
 </style>
 </head>
 <body>
-<!-- la pantalla de carga: el nombre y una barrita que va y viene, hasta que la página está lista -->
-<div class="carga" id="carga" aria-hidden="true"><div class="carga-in"><b>Lil Sanguchito</b><i></i></div></div>
+<!-- la pantalla de carga: un play que late con un aro que gira, y el nombre, hasta que la página está lista -->
+<div class="carga" id="carga" aria-hidden="true"><div class="carga-in"><span class="carga-p"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.14v13.72c0 .79.87 1.27 1.54.84l10.78-6.86a1 1 0 0 0 0-1.68L9.54 4.3A1 1 0 0 0 8 5.14z" fill="currentColor"/></svg></i></span><b>Lil Sanguchito</b></div></div>
 
 <div class="page" id="page" tabindex="-1">
 <main id="top" lang="es">
