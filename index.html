@@ -269,6 +269,7 @@ dialog.dlg[open]::backdrop { animation: fade-in .22s ease-out; }
   .sh-it:not(.on) .sh-v { filter: none; }   /* los que asoman, oscurecidos con una capa encima: un filtro sobre el video pesa */
   .sh-v::after { content: ""; position: absolute; inset: 0; z-index: 9; background: #000; opacity: 0; transition: opacity .4s; pointer-events: none; }
   .sh-it:not(.on) .sh-v::after { opacity: .45; }
+  .sh-it { will-change: transform; }   /* cada vertical en su capa: deslizarlo de costado y soltarlo va liviano */
 }
 dialog.watch[open] > .panel, dialog.shorts[open] > .sh-feed { animation: pop-in .26s cubic-bezier(.2, .8, .2, 1); }
 /* video horizontal: como la página de un video en YouTube. A la izquierda el video y sus datos; a la

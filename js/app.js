@@ -198,6 +198,10 @@
   var lastTab = 0;                                         // cuándo se apretó Tab por última vez
   document.addEventListener('keydown', function (e) { if (e.key === 'Tab') lastTab = Date.now(); }, true);
   var belts = [], scrolling = 0, HELD = 0, modal = false; // un solo cuadro de animación para todas las filas
+  function unheld() {                                     // terminó el arrastre: los controles de los reproductores, al día
+    HELD = 0;
+    setTimeout(function () { [YT, RP].forEach(function (S) { if (S.later && !HELD) { S.later = false; paint(S); } }); }, 120);
+  }
   var DLGS = document.getElementsByTagName('dialog');     // (siempre al día: mirar si hay una ventana abierta es barato)
   requestAnimationFrame(function frame(now) {
     modal = false;                                         // una ventana abierta (no el mini): las filas de la página, quietas
@@ -811,7 +815,7 @@
       // Va después de abrir la ventana, porque cerrada no tiene scroll y el navegador volvía a donde había quedado
       ['#w-list', '#w-main', '#w-body'].forEach(function (s) { var el = $(s); if (el) el.scrollTop = 0; });
       requestAnimationFrame(fitDesc);
-      autoPlay();
+      setTimeout(function () { if (d.open && WA.now === w && !isMini()) autoPlay(); }, 300);   // primero se abre (sin trabarse); el video, después
       return;
     }
     if (WA.now && w.id === WA.now.id) {                          // el que ya está: solo el toque
@@ -1017,6 +1021,7 @@
       else { S.end = true; S.t = S.d; }
     }
     nearEnd(S);
+    if (HELD) { S.later = true; return; }            // arrastrando: los controles, después (lo que se toca, primero)
     paint(S);
   });
   // justo antes del final: el horizontal se frena (queda su último cuadro y el botón de volver a verlo, sin la
@@ -1245,9 +1250,9 @@
     if (done) { e.preventDefault(); if (YT.on) ui(true); }
   });
 
-  // Los verticales se precargan: los dos de abajo y el de arriba ya tienen el reproductor cargado (escondido y sin
-  // sonar) y, los de YouTube, también el principio del video: arrancan mudos un instante y se frenan al principio,
-  // así al pasar se ven al instante. El que se va queda en pausa por si volvés; los más lejos se descargan.
+  // Los verticales no se precargan (cada reproductor de YouTube pesa mucho en el celular): cada uno carga recién
+  // cuando queda quieto en pantalla. El que se va queda en pausa por si volvés; los más lejos se descargan.
+  // (reelPre y warm quedan por si algún día se vuelve a precargar)
   var reelFrame = function (it) { return it && it.querySelector('.sh-v iframe'); };
   var kindOf = function (f) { return f.classList.contains('yt') ? 'yt' : f.classList.contains('tt') ? 'tt' : ''; };
   function reelPre(it) {
@@ -1378,7 +1383,7 @@
   function miDrop() {
     var g = MI.drag; MI.drag = null;
     if (!g || !MI.moved) return;
-    MI.moved = false; HELD = 0; MI.swallow = true; setTimeout(function () { MI.swallow = false; });   // el clic de soltar no lo agranda
+    MI.moved = false; unheld(); MI.swallow = true; setTimeout(function () { MI.swallow = false; });   // el clic de soltar no lo agranda
     document.documentElement.classList.remove('grabbing');
     var a = WD.getBoundingClientRect(), c = (a.top + a.height / 2 < innerHeight / 2 ? 't' : 'b') + (a.left + a.width / 2 < innerWidth / 2 ? 'l' : 'r');
     WD.style.transform = ''; miCorner(c);
@@ -1416,7 +1421,7 @@
       var k = g; g = null;
       if (!k || !k.on) return;
       if (k.raf) cancelAnimationFrame(k.raf);
-      HELD = 0;
+      unheld();
       MI.swallow = true; setTimeout(function () { MI.swallow = false; });   // el clic de soltar no lo agranda ni lo pausa
       var clear = function () { p.style.transform = ''; p.style.opacity = ''; p.style.paddingTop = ''; fade(''); };
       if (k.dy < 0) {
@@ -1490,7 +1495,7 @@
       });
     });
     var reach = function () { return Math.min(140, innerHeight * .2); };   // el tramo: pasándolo, al soltar se achica
-    function clear() { HELD = 0; panel.style.transform = ''; panel.style.opacity = ''; panel.style.transformOrigin = ''; panel.style.willChange = ''; panel.classList.remove('w-drag'); document.documentElement.classList.remove('grabbing'); WD.style.removeProperty('--bd'); }
+    function clear() { unheld(); panel.style.transform = ''; panel.style.opacity = ''; panel.style.transformOrigin = ''; panel.style.willChange = ''; panel.classList.remove('w-drag'); document.documentElement.classList.remove('grabbing'); WD.style.removeProperty('--bd'); }
     function drop() {                                 // en el celular: al toque queda el mini (con el video cargado) o se cierra
       clear();
       closeWatch();
@@ -1547,7 +1552,7 @@
     function up(e) {
       var k = g; g = null;
       if (!k) return;
-      HELD = 0;
+      if (k.on) unheld();
       if (k.raf) cancelAnimationFrame(k.raf);
       if (!k.on) {
         if (e.type !== 'pointerup') return;
@@ -1692,7 +1697,8 @@
     show(SH.d);
     SH.mt = parseFloat(getComputedStyle(SH.items[0]).scrollMarginTop) || 0;
     SH.feed.scrollTop = 0;
-    shActive(0); setTimeout(SB, 320);
+    shActive(0, true); clearTimeout(shRest); shRest = setTimeout(function () { shActive(shIndex()); }, 300);   // primero se abre; el video, después
+    setTimeout(SB, 320);
   }
   function shIndex() {                                   // el que quedó en el centro
     var top = SH.feed.scrollTop + SH.mt, best = 0, dd = Infinity;
@@ -1718,22 +1724,14 @@
     SH.wait = true;
     if (!moving) shLoad();
   }
-  // lo pesado, recién con el vertical quieto (mientras se desliza, el celular va liviano): que suene el que quedó, que
-  // se descarguen los lejos y que se precarguen los de al lado, de a uno y nunca mientras se desliza
+  // lo pesado, recién con el vertical quieto (mientras se desliza, el celular va liviano): que suene el que quedó y
+  // que se descarguen los lejos
   function shLoad() {
     SH.wait = false;
     var n = SH.i, it = SH.items[n];
     if (!it) return;
     reelGo(it);                                          // el que queda en pantalla arranca solo
-    SH.items.forEach(function (x, k) { if (k < n - 1 || k > n + 2) stopHere(x.querySelector('.sh-v')); });   // los lejos se descargan
-    var q = [n + 1, n + 2, n - 1];                       // los dos de abajo y el de arriba, listos: de a uno, así primero
-    clearTimeout(SH.pre); SH.pre = setTimeout(function step() {   // carga el que se ve y el celular no se atraganta
-      if (SH.i !== n) return;
-      if (performance.now() - (SH.moved || 0) < 400) { SH.pre = setTimeout(step, 400); return; }   // deslizando: después
-      var made = false;
-      while (q.length && !made) made = reelPre(SH.items[q.shift()]);
-      if (q.length) SH.pre = setTimeout(step, made ? 1200 : 0);
-    }, 400);
+    SH.items.forEach(function (x, k) { if (k < n - 1 || k > n + 1) stopHere(x.querySelector('.sh-v')); });   // los lejos se descargan
   }
   function shGo(n, fast) {
     if (n > SH.items.length - 1 && SH.items.length) return SH.d.close();   // después del último: se cierra y queda la página donde estaba
@@ -1766,7 +1764,7 @@
       if (!hz.on) {
         if (ay > 14 && ay > ax) { hz = null; return; }   // para arriba o para abajo: es el otro vertical
         if (ax < 24 || ax < ay * 1.6) return;            // un roce no cuenta
-        hz.on = true; hz.x0 = dx > 0 ? 24 : -24; SH.d.classList.add('sh-drag');
+        hz.on = true; hz.x0 = dx > 0 ? 24 : -24; HELD = 1; SH.d.classList.add('sh-drag');
         try { hz.it.setPointerCapture(e.pointerId); } catch (x) {}
         hz.it.getAnimations().forEach(function (a) { a.cancel(); });
       }
@@ -1784,7 +1782,7 @@
       if (k.raf) cancelAnimationFrame(k.raf);
       if (!k.on) return;
       swallow = true; setTimeout(function () { swallow = false; });   // soltarlo no pausa
-      k.it.style.transform = ''; k.it.style.opacity = ''; SH.d.style.removeProperty('--bd'); SH.d.classList.remove('sh-drag');
+      unheld(); k.it.style.transform = ''; k.it.style.opacity = ''; SH.d.style.removeProperty('--bd'); SH.d.classList.remove('sh-drag');
       if (Math.abs(k.dx) >= far()) return SH.d.close();   // pasado el tramo: se cierra, al toque
       if (!still()) k.it.animate([{ transform: 'translateX(' + k.dx + 'px)', opacity: fadeAt(Math.abs(k.dx) / far()) }, { transform: 'none', opacity: 1 }], { duration: 140, easing: EASE });   // si no, vuelve rápido
     }
@@ -1811,7 +1809,21 @@
       SH.feed.addEventListener('scroll', function () { clearTimeout(idle); idle = setTimeout(function () { if (!down) settle(); }, 200); }, { passive: true });
     }
   })();
-  SH.d.addEventListener('close', function () { if (SH.d.open) return; SH.feed.innerHTML = ''; SH.items = []; SH.i = -1; pReset(RP); clearTimeout(RT.timer); });   // si ya se volvió a abrir, no se vacía
+  // al cerrarse: lo que suena se calla en el acto y los reproductores se descargan un toque después, de a uno
+  // (borrarlos todos juntos, en el celular, trababa el cierre). Si ya se volvió a abrir, no se toca nada
+  SH.d.addEventListener('close', function () {
+    if (SH.d.open) return;
+    clearTimeout(RT.timer); clearTimeout(SH.pre); clearTimeout(shRest);
+    SH.items.forEach(function (it) { var f = reelFrame(it); if (!f) return; if (kindOf(f)) post(f, kindOf(f), 'pause'); else f.remove(); });   // los de Drive no se pausan: se van ya
+    pReset(RP); SH.items = []; SH.i = -1; SH.wait = false;
+    var gen = SH.gen = (SH.gen || 0) + 1;
+    setTimeout(function next() {
+      if (SH.d.open || SH.gen !== gen) return;
+      var f = SH.feed.querySelector('iframe');
+      if (f) { f.remove(); return setTimeout(next, 80); }
+      SH.feed.innerHTML = '';
+    }, 150);
+  });
   // con el dedo: en el último, deslizando para arriba (como para ver el siguiente), se cierra
   (function () {
     var y0 = null, y1 = 0, end = false;
