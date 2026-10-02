@@ -198,7 +198,7 @@
   var MAXV = 1600;                                         // px por segundo: el envión más fuerte
   var lastTab = 0;                                         // cuándo se apretó Tab por última vez
   document.addEventListener('keydown', function (e) { if (e.key === 'Tab') lastTab = Date.now(); }, true);
-  var belts = [], scrolling = 0, HELD = 0, modal = false; // un solo cuadro de animación para todas las filas
+  var belts = [], HELD = 0, modal = false;               // un solo cuadro de animación para todas las filas
   function unheld() {                                     // terminó el arrastre: los controles de los reproductores, al día
     HELD = 0;
     setTimeout(function () { [YT, RP].forEach(function (S) { if (S.later && !HELD) { S.later = false; paint(S); } }); }, 120);
@@ -210,7 +210,6 @@
     belts.forEach(function (f) { f(now); });
     requestAnimationFrame(frame);
   });
-  PAGE.addEventListener('scroll', function () { scrolling = performance.now() + 250; }, { passive: true });   // mientras se desliza la página, las filas esperan: va más liviano
   function carousel(track, n) {
     // A cada lado de los videos va una copia de la tanda completa. Cuando la fila entra en la zona de
     // copias, salta en silencio a la posición igual de la tanda original, así después del último viene
@@ -278,7 +277,7 @@
       var dt = last ? Math.min(50, now - last) : 16;
       last = now;
       if (inDlg === null && track.isConnected) inDlg = !!track.closest('dialog');   // si está en una ventana (se mira una vez)
-      if (!looped || reduce || document.hidden || window.__snap || now < scrolling || focused || (drag && drag.on) || wh.on || HELD || (!inDlg && modal)) return halt();   // con una ventana abierta, las de la página quietas; arrastrando algo, todas
+      if (!looped || reduce || document.hidden || window.__snap || focused || (drag && drag.on) || wh.on || (!inDlg && modal)) return halt();   // con una ventana abierta, las de la página quietas (no se ven); si no, giran siempre
       if (!inView) { halt(); v = dir * SPEED; return; }   // fuera de la pantalla espera, ya a su velocidad
       if (!running) { running = true; pos = track.scrollLeft; }
       v = dir * SPEED + (v - dir * SPEED) * Math.exp(-dt / GLIDE);
@@ -538,6 +537,13 @@
   }
   var EASE = 'cubic-bezier(.2, .8, .2, 1)';
   var still = function () { return matchMedia('(prefers-reduced-motion: reduce)').matches; };
+  function hush(S) {                                  // frena el video mientras se arrastra (sin mostrar nada): avisa si sonaba
+    if (!TOUCH || !S.f || !S.kind || !sounds(S) || S.end) return false;
+    post(S.f, S.kind, 'pause'); return true;
+  }
+  function wake(S, f) {                               // al soltar: que siga (si sigue siendo el mismo video)
+    if (S.f && S.f === f) pCmd(S, 'play');
+  }
   var fadeAt = function (p) { return Math.max(.25, 1 - .6 * Math.max(0, p)); };   // lo que se arrastra para irse se va difuminando: justo en el tramo, al 40 %
   var full = new Intl.NumberFormat('es-AR');
   var linkify = function (s) { return esc(s).replace(/https?:\/\/[^\s<]+/g, function (u) { return '<a href="' + u + '" target="_blank" rel="noopener">' + u + '</a>'; }); };
@@ -687,7 +693,7 @@
     if (fsEl() && stage.contains(fsEl())) fsExit();
     if (RP.f && stage.contains(RP.f)) pReset(RP);
     [].forEach.call(stage.querySelectorAll('iframe, .msg'), function (x) { x.remove(); });
-    stage.classList.remove('playing', 'live', 'yield', 'fin', 'dr');
+    stage.classList.remove('playing', 'live', 'seen', 'yield', 'fin', 'dr');
     var pl = stage.querySelector('.play'); if (pl) pl.hidden = false;
     vpReset(stage.querySelector('.vp'));
     if (stage.id === 'w-stage') { pReset(YT); clearTimeout(UIT); vpReset($('#w-mini')); }
@@ -873,7 +879,16 @@
   var WD = $('#dlgWatch'), miOn = null;
   var isMini = function () { return WD.open && WD.classList.contains('mini'); };
   var hasVideo = function () { return !!$('#w-stage iframe'); };   // el video ya cargado (sonando o en pausa): al cerrar, queda el mini
-  function setMini(on) { WD.classList.toggle('mini', on); document.documentElement.classList.toggle('has-mini', on); ui(false); }
+  function setMini(on) {
+    var f = $('#w-stage iframe'), st = $('#w-stage');
+    if (on && f && !WD.classList.contains('mini')) {   // antes de achicarlo: lo que mide grande
+      var r = st.getBoundingClientRect();
+      if (r.width) { f.style.setProperty('--fw', r.width.toFixed(1) + 'px'); f.style.setProperty('--fh', r.height.toFixed(1) + 'px'); f.classList.add('keep'); f._fw = r.width; }
+    }
+    WD.classList.toggle('mini', on); document.documentElement.classList.toggle('has-mini', on); ui(false);
+    if (on && f && f._fw) f.style.setProperty('--fk', (st.getBoundingClientRect().width / f._fw).toFixed(4));   // y cuánto se achica a la vista
+    if (!on && f && f.classList.contains('keep')) { f.classList.remove('keep'); ['--fw', '--fh', '--fk'].forEach(function (p) { f.style.removeProperty(p); }); f._fw = 0; }
+  }
   function reopen(mini) {                             // la misma ventana, grande o chica, al toque (solo cambia su clase): el video sigue sonando
     if (!WD.open) show(WD);
     setMini(mini);
@@ -944,7 +959,7 @@
         '<div class="vp-bar" aria-hidden="true"><i class="vp-buf"></i><i class="vp-fill"></i><i class="vp-knob"></i><span class="vp-tip"></span></div>' +
       '</div>') + '</div>';
   }
-  function mk() { return { f: null, kind: '', ok: false, on: false, st: -1, t: 0, d: 0, at: 0, rate: 1, vol: 100, muted: false, buf: 0, end: false, since: 0, lp: 0, drag: null, was: false, sync: null, fin: 0 }; }
+  function mk() { return { f: null, kind: '', ok: false, on: false, seen: false, st: -1, t: 0, d: 0, at: 0, rate: 1, vol: 100, muted: false, buf: 0, end: false, since: 0, lp: 0, drag: null, was: false, sync: null, fin: 0 }; }
   var YT = mk(), RP = mk();
   function pReset(S) { var n = mk(), k; for (k in n) S[k] = n[k]; }
   var sounds = function (S) { return S.ok ? S.st === 1 || S.st === 3 : !!S.f; };   // si no avisa, cuenta como que suena
@@ -1027,6 +1042,7 @@
       S.st = st;
     }
     if (st === 1 || st === 3) { S.on = true; if (S.t < S.d - 1) S.end = false; }   // ya arrancó: desde ahora se maneja con los de encima
+    if (S.st === 1 && S.t > .05) S.seen = true;      // y ya se ve la imagen: recién ahí aparece el video
     if (st === 0) {                                    // terminó (si no se llegó a frenar antes)
       if (S === RP) { post(S.f, S.kind, 'seek', 0); post(S.f, S.kind, 'play'); S.st = 1; S.t = 0; S.at = now; }   // el vertical vuelve a empezar
       else { S.end = true; S.t = S.d; }
@@ -1122,7 +1138,7 @@
   }
   function paintStage() {
     var st = $('#w-stage'), on = YT.on && sounds(YT) && !YT.end;
-    st.classList.toggle('live', YT.on); if (YT.on) st.classList.remove('yield');
+    st.classList.toggle('live', YT.on); st.classList.toggle('seen', YT.seen); if (YT.on) st.classList.remove('yield');
     st.classList.toggle('fin', !!YT.f && YT.st === 0);  // terminó del todo: YouTube muestra su pantalla final, así que va la miniatura
     if (YT.on && YT.was && !on && !isMini()) ui(true, true);   // al pausar (o al terminar), los controles aparecen y quedan
     else if (on && !YT.was && !isMini()) ui(true);   // arranca o sigue: a la vista con el ícono de pausa de YouTube y se van con él
@@ -1132,7 +1148,7 @@
     var it = SH.items[SH.i], v = it && it.querySelector('.sh-v');
     if (!v) return;
     var lv = RP.on || (RP.kind === 'tt' && !!RP.f);
-    v.classList.toggle('live', lv); if (lv) v.classList.remove('yield');
+    v.classList.toggle('live', lv); v.classList.toggle('seen', RP.seen || (RP.kind === 'tt' && !!RP.f)); if (lv) v.classList.remove('yield');
   }
   // los controles del horizontal, a la vista o no. Sonando, se van solos (con el mouse, si no está sobre la barra de abajo)
   var UIT = 0;
@@ -1144,7 +1160,7 @@
     if (on && !keep && sounds(YT) && !YT.end) UIT = setTimeout(function hide() {
       if (YT.drag != null || vp.querySelector('.vp-bot:hover, .vp-vol.on')) { UIT = setTimeout(hide, 800); return; }
       if (sounds(YT) && !YT.end) vp.classList.remove('v-ui');
-    }, Math.max(fine() ? 2500 : 3000, YT.since + 5200 - performance.now()));   // recién arrancó: junto con el ícono de YouTube
+    }, Math.max(fine() ? 2500 : 3000, YT.since + (fine() ? 5200 : 6500) - performance.now()));   // recién arrancó: cuando el ícono de YouTube ya se fue (en el celular, el nuestro lo tapa)
   }
   // Al arrancar o seguir, YouTube muestra unos segundos su propio ícono de pausa en el medio (no se puede sacar desde
   // afuera): ese es el único del medio. Los nuestros no van ahí mientras suena (solo el play, en pausa) y los
@@ -1309,7 +1325,7 @@
     if (!f) return;
     post(f, kindOf(f), 'pause');
     if (RP.f === f) pReset(RP);
-    f.classList.add('pre'); v.classList.remove('playing', 'live', 'yield');
+    f.classList.add('pre'); v.classList.remove('playing', 'live', 'seen', 'yield');
     var pb = v.querySelector('.play'); if (pb) pb.hidden = false;
     vpReset(v.querySelector('.vp'));
   }
@@ -1492,6 +1508,7 @@
         if (Math.abs(dy) < 10 || Math.abs(dx) > Math.abs(dy)) return;
         if (dy < 0) { g.up = stacked() && dy < -40; return; }   // para arriba (en el celular): pantalla completa, al soltar
         g.on = true; g.free = !stacked(); HELD = 1; ui(false); panel.style.willChange = 'transform, opacity'; panel.classList.add('w-drag');
+        g.f = YT.f; g.hushed = hush(YT);
         try { stage.setPointerCapture(e.pointerId); } catch (x) {}
         panel.getAnimations().forEach(function (x) { x.cancel(); });
         if (g.free) { document.documentElement.classList.add('grabbing'); noSel(); }   // en la compu, la ventana entera sigue al mouse
@@ -1565,6 +1582,7 @@
       if (!k) return;
       if (k.on) unheld();
       if (k.raf) cancelAnimationFrame(k.raf);
+      if (k.on && k.hushed) wake(YT, k.f);            // el video sigue: achicado, de vuelta en su lugar o en pantalla completa
       if (!k.on) {
         if (e.type !== 'pointerup') return;
         if (k.up && !fsEl()) { if (YT.on) ui(false); return fsToggle(); }   // deslizando para arriba: pantalla completa
@@ -1782,6 +1800,7 @@
         if ((ay > 14 && ay > ax) || SH.vdrag) { hz = null; return; }   // para arriba o para abajo: es el otro vertical
         if (ax < 24 || ax < ay * 1.6) return;            // un roce no cuenta
         hz.on = true; hz.x0 = dx > 0 ? 24 : -24; HELD = 1; SH.side = true; SH.d.classList.add('sh-drag');
+        hz.f = RP.f; hz.hushed = hush(RP);
         if (hz.mouse) { document.documentElement.classList.add('grabbing'); noSel(); }
         try { hz.it.setPointerCapture(e.pointerId); } catch (x) {}
         hz.it.getAnimations().forEach(function (a) { a.cancel(); });
@@ -1808,6 +1827,7 @@
     function finish(k) {                               // al soltar: pasado el tramo, se cierra al toque; si no, vuelve rápido
       SH.side = false; unheld(); k.it.style.transform = ''; k.it.style.opacity = ''; SH.d.style.removeProperty('--bd'); SH.d.classList.remove('sh-drag');
       if (Math.abs(k.dx) >= far()) return SH.d.close();
+      if (k.hushed) wake(RP, k.f);                    // vuelve: el video sigue
       if (!still()) k.it.animate([{ transform: 'translateX(' + k.dx + 'px)', opacity: fadeAt(Math.abs(k.dx) / far()) }, { transform: 'none', opacity: 1 }], { duration: 140, easing: EASE });
     }
     // con el trackpad (o shift y la rueda), de costado: igual que con el dedo; se suelta cuando el gesto termina
