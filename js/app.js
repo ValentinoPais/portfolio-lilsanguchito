@@ -3,6 +3,8 @@
    js/config.js tiene la key y la planilla, y si no, los de ejemplo (js/mock-data.js), con la misma forma. */
 (function () {
   'use strict';
+  // las imágenes aparecen suave cuando terminan de cargar (el fundido está en el CSS): acá se marca cada una
+  document.addEventListener('load', function (e) { var t = e.target; if (t && t.tagName === 'IMG') t.classList.add('ok'); }, true);
   var ready = window.loadSiteData ? window.loadSiteData() : Promise.resolve(window.MOCK_DATA);
   ready.then(function (M) { start(M); }, function () { start(window.MOCK_DATA); })
     .catch(function (e) { setTimeout(function () { throw e; }); });   // un error de la web, a la consola
@@ -341,7 +343,7 @@
     feed.innerHTML = out.join('');
     [].forEach.call(feed.querySelectorAll('.track'), function (t, n) { undo.push(carousel(t, n)); });   // una para cada lado
   }
-  layout();
+  layout(); $('#trabajos').classList.add('in');      // los videos aparecen suave
   window.addEventListener('resize', layout);
 
   // ---------------- los temas, entre el canal y los videos ----------------
@@ -351,28 +353,31 @@
   // los de uno) y no va uno que tengan todos, porque sería lo mismo que Todo. Tocando uno, quedan solo sus
   // videos (los de Drive y TikTok no tienen temas: están en Todo). Si no entran, se deslizan de costado y,
   // con mouse, aparecen las flechas.
-  (function () {
-    var box = $('#chips'), row = $('#chip-r'), count = {}, list = [];
-    works.slice().sort(byViews).forEach(function (w) {
+  function topicsFor(pool) {                         // los temas de un grupo de videos, con esas reglas
+    var count = {}, list = [];
+    pool.slice().sort(byViews).forEach(function (w) {
       (w.topics || []).forEach(function (t) { if (!count[t]) { count[t] = 0; list.push(t); } count[t]++; });
     });
-    list = list.filter(function (t) { return count[t] < works.length; });
+    list = list.filter(function (t) { return count[t] < pool.length; });
     var min = list.filter(function (t) { return count[t] >= 2; }).length >= 3 ? 2 : 1;
-    list = list.filter(function (t) { return count[t] >= min; })
+    return list.filter(function (t) { return count[t] >= min; })
       .map(function (t, i) { return { t: t, i: i }; })
       .sort(function (a, b) { return count[b.t] - count[a.t] || a.i - b.i; })
       .slice(0, 12).map(function (x) { return x.t; });
-    if (!list.length) return;                        // sin temas, el canal y los videos quedan separados solo por la línea
+  }
+  // una fila de temas: Todo y los temas. pick(t) al tocar uno; set(t) marca uno desde afuera
+  function chipRow(box, row, list, pick) {
+    var cur = '', reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     row.innerHTML = [''].concat(list).map(function (t) {
-      return '<button class="chip" type="button" data-topic="' + esc(t) + '" aria-pressed="' + (t === topic) + '">' + esc(t || 'Todo') + '</button>';
+      return '<button class="chip" type="button" data-topic="' + esc(t) + '" aria-pressed="' + (t === cur) + '">' + esc(t || 'Todo') + '</button>';
     }).join('');
     box.hidden = false;
-    var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     function edges() {                               // las flechas, solo si hay más para ese lado
       var max = row.scrollWidth - row.clientWidth;
       box.classList.toggle('l', row.scrollLeft > 2);
       box.classList.toggle('r', row.scrollLeft < max - 2);
     }
+    function set(t) { cur = t; [].forEach.call(row.children, function (c) { c.setAttribute('aria-pressed', String(c.dataset.topic === t)); }); }
     row.addEventListener('scroll', edges, { passive: true });
     if (window.ResizeObserver) new ResizeObserver(edges).observe(row);
     edges();
@@ -380,14 +385,21 @@
       var a = e.target.closest('.chip-a');
       if (a) { row.scrollBy({ left: (a.classList.contains('next') ? 1 : -1) * row.clientWidth * .7, behavior: reduce ? 'auto' : 'smooth' }); return; }
       var b = e.target.closest('.chip');
-      if (!b || b.dataset.topic === topic) return;
-      topic = b.dataset.topic;
-      [].forEach.call(row.children, function (c) { c.setAttribute('aria-pressed', String(c === b)); });
+      if (!b || b.dataset.topic === cur) return;
+      set(b.dataset.topic);
       // el elegido, entero a la vista (solo de costado: la página no se mueve)
       var r = row.getBoundingClientRect(), cr = b.getBoundingClientRect();
       if (cr.left < r.left + 40) row.scrollBy({ left: cr.left - r.left - 40, behavior: reduce ? 'auto' : 'smooth' });
       else if (cr.right > r.right - 40) row.scrollBy({ left: cr.right - r.right + 40, behavior: reduce ? 'auto' : 'smooth' });
-      layout();
+      pick(cur);
+    });
+    return { set: function (t) { set(t); row.scrollLeft = 0; edges(); } };
+  }
+  (function () {
+    var list = topicsFor(works);
+    if (!list.length) return;                        // sin temas, el canal y los videos quedan separados solo por la línea
+    chipRow($('#chips'), $('#chip-r'), list, function (t) {
+      topic = t; layout();
       feed.classList.remove('swap'); void feed.offsetWidth; feed.classList.add('swap');
     });
   })();
@@ -482,7 +494,8 @@
   // El play es a mano: recién ahí se carga el reproductor de YouTube, Drive o TikTok, en el lugar de la
   // miniatura. Un video que su canal no deja insertar se abre en YouTube. Con los datos de ejemplo, un aviso.
   function embedOf(w) {
-    if (w.yt) return w.embed ? 'https://www.youtube-nocookie.com/embed/' + w.yt + '?autoplay=1&playsinline=1&rel=0' : '';
+    if (w.yt) return w.embed ? 'https://www.youtube-nocookie.com/embed/' + w.yt + '?autoplay=1&playsinline=1&rel=0&enablejsapi=1' +   // enablejsapi: para el mini reproductor
+      (location.origin && location.origin !== 'null' ? '&origin=' + encodeURIComponent(location.origin) : '') : '';
     if (w.drive) return 'https://drive.google.com/file/d/' + w.drive + '/preview';
     if (w.tt) return 'https://www.tiktok.com/player/v1/' + w.tt + '?autoplay=1&rel=0';
     return '';
@@ -507,15 +520,19 @@
     [].forEach.call(stage.querySelectorAll('iframe, .msg'), function (x) { x.remove(); });
     stage.classList.remove('playing');
     var pl = stage.querySelector('.play'); if (pl) pl.hidden = false;
+    if (stage.id === 'w-stage') YT = { f: null, ok: false, st: -1, t: 0, d: 0 };
   }
-  $('#w-play').addEventListener('click', function () { playHere(this, $('#w-stage'), WA.now); });
+  $('#w-play').addEventListener('click', function () {
+    playHere(this, $('#w-stage'), WA.now);
+    var f = $('#w-stage iframe'); if (f && WA.now && WA.now.yt) ytHook(f);   // para el mini reproductor: cómo va, play y pausa
+  });
 
   // ---------------- V1 · el video horizontal, como la página de un video en YouTube ----------------
   // El video grande con su miniatura y el play a mano; abajo el título y la fila del canal, con las views;
-  // más abajo, la descripción original. A la derecha, todos los videos del mismo creador,
-  // de más a menos views, con el que está en pantalla marcado: la lista se mueve sola, con la rueda, el dedo
+  // más abajo, la descripción original. A la derecha, los demás videos (el que estás viendo no está),
+  // con variedad: la lista se mueve sola, con la rueda, el dedo
   // o arrastrándola con el mouse. Si el creador no tiene otros, muestra los más vistos del resto.
-  // Al tocar otro, su miniatura vuela hasta el lugar del video y los datos cambian con un fundido.
+  // Al tocar otro, cambia directo, sin animación. Arriba de la lista, los temas, como los de la página.
   var creator = function (w) { return w.client ? 'c:' + w.client.toLowerCase() : w.channelId ? 'y:' + w.channelId : 'w:' + w.id; };
   // Lo que sigue al que estás viendo, con variedad: el que elegiste primero y después se alternan uno del
   // mismo creador y uno de otro. Los de otros creadores van rotando (cada vuelta, el más visto de cada uno,
@@ -541,7 +558,8 @@
     }
     return out;
   }
-  var WA = { now: null, key: '', seq: 0 };
+  var WA = { now: null, key: '', seq: 0, topic: '', keep: 0 };
+  var WB = ownBar($('#dlgWatch'), function () { return stacked() ? $('#w-body') : $('#w-list'); });   // la barra propia: la lista (en el celular, todo lo de abajo)
   var STACK = matchMedia('(max-width: 1000px)');
   var stacked = function () { return STACK.matches; };
   // en el celular y la tablet, la lista va dentro de lo que se desliza debajo del video; en la compu, a la derecha
@@ -558,118 +576,78 @@
       '<span class="w-it-t"><span class="w-it-ttl">' + esc(v.title) + '</span>' + (v.who ? '<span class="w-it-s">' + esc(v.who) + '</span>' : '') +
       (v.views != null ? '<span class="w-it-s w-it-v"><i aria-hidden="true">▶</i> ' + abbr(v.views) + '<span class="sr"> views</span></span>' : '') + '</span></button>';
   }
-  // el que estás viendo, primero; abajo, todos los demás horizontales con variedad
-  function listFor(w) { return { key: 'mix:' + w.id, title: 'Más trabajos', items: mix(w, hs) }; }
+  // los demás horizontales, sin el que estás viendo, con variedad (del tema elegido arriba de la lista)
+  function listFor(w) {
+    var pool = WA.topic ? hs.filter(function (v) { return (v.topics || []).indexOf(WA.topic) >= 0; }) : hs;
+    return { key: 'mix:' + w.id + ':' + WA.topic, title: 'Más trabajos', items: mix(w, pool).slice(1) };
+  }
   function fillList(L) {
     $('#w-more').textContent = L.title;
-    $('#w-list').innerHTML = L.items.map(sideItem).join('');
-    WA.key = L.key;
-  }
-  function markNow(id) {                              // el que está en pantalla, marcado en su lugar
-    [].forEach.call($('#w-list').children, function (el) {
-      var on = el.dataset.watch === id;
-      el.classList.toggle('now', on);
-      if (on) el.setAttribute('aria-current', 'true'); else el.removeAttribute('aria-current');
-    });
+    $('#w-list').innerHTML = L.items.length ? L.items.map(sideItem).join('') : '<p class="empty">No hay otros videos con este tema.</p>';
+    WA.key = L.key; WB();
   }
   function fillStage(w) {
     stopHere($('#w-stage'));
-    $('#w-img').src = w.thumb;
+    var im = $('#w-img');
+    if (im.getAttribute('src') !== w.thumb) { im.classList.remove('ok'); im.src = w.thumb; }   // la nueva aparece suave
     $('#w-dur').textContent = w.dur || ''; $('#w-dur').hidden = !w.dur;
   }
   function fillMeta(w) {
-    $('#w-t').textContent = w.title;
+    var tt = $('#w-t');                               // el título lleva al original; con el mouse, el cartel lo dice
+    tt.innerHTML = '<a class="w-tl" href="' + esc(w.out) + '" target="_blank" rel="noopener">' + esc(w.title) + '</a>';
+    tt.setAttribute('data-tip', w.outLabel);
     var stat = w.views != null ? '<b class="w-views">' + full.format(w.views) + ' visualizaciones</b>' : '';
-    $('#w-ch').innerHTML = channelBlock(w) + (stat ? '<div class="w-stat">' + stat + '</div>' : '') +
-      '<a class="btn" href="' + esc(w.out) + '" target="_blank" rel="noopener">' + esc(w.outLabel) + '</a>';
+    $('#w-ch').innerHTML = channelBlock(w) + (stat ? '<div class="w-stat">' + stat + '</div>' : '');
     var box = $('#w-desc');
     box.innerHTML = w.desc ? '<div class="d-txt">' + linkify(w.desc) + '<button class="d-more" type="button" hidden>…más</button></div>'
       : '<span class="nod">Sin descripción.</span>';
     box.classList.remove('open');
   }
+  // arriba de la lista, los temas, como los de la página: tocando uno, la lista queda con los de ese tema
+  var wChips = (function () {
+    var list = topicsFor(hs);
+    if (!list.length) return null;
+    return chipRow($('#w-chips'), $('#w-chip-r'), list, function (t) {
+      WA.topic = t;
+      fillList(listFor(WA.now)); $('#w-list').scrollTop = 0;
+    });
+  })();
+  // el cartel del título sigue al mouse, sin salirse del título
+  $('#w-t').addEventListener('mousemove', function (e) {
+    var r = this.getBoundingClientRect(), pw = parseFloat(getComputedStyle(this, '::after').width) || 120;
+    this.style.setProperty('--tx', Math.round(Math.max(pw / 2, Math.min(r.width - pw / 2, e.clientX - r.left))) + 'px');
+  });
+  function autoPlay() { if (LIVE && WA.now && embedOf(WA.now)) $('#w-play').click(); }   // al tocar un video, arranca solo
   function openWatch(id, from) {
     var w = byId[id], d = $('#dlgWatch');
     if (!w) return;
+    if (isMini()) {                                    // con el mini reproductor: el mismo se agranda; otro, se abre grande
+      if (WA.now && w.id === WA.now.id) return reopen(false);
+      WA.keep++; d.close(); setMini(false); stopHere($('#w-stage'));
+    }
     if (!d.open) {
-      WA.now = w; WA.seq++;
-      fillStage(w); fillMeta(w); fillList(listFor(w)); markNow(w.id);
-      show(d);
+      WA.now = w; WA.seq++; WA.topic = ''; if (wChips) wChips.set('');   // cada vez que se abre, con Todo
+      fillStage(w); fillMeta(w); fillList(listFor(w));
+      show(d); setTimeout(WB, 320);
       // cada video que abrís arranca arriba de todo: la lista, la columna del video y lo de abajo en el celular.
       // Va después de abrir la ventana, porque cerrada no tiene scroll y el navegador volvía a donde había quedado
       ['#w-list', '#w-main', '#w-body'].forEach(function (s) { var el = $(s); if (el) el.scrollTop = 0; });
       requestAnimationFrame(fitDesc);
+      autoPlay();
       return;
     }
     if (WA.now && w.id === WA.now.id) {                          // el que ya está: solo el toque
       if (from && !still()) from.animate([{ transform: 'scale(.97)' }, { transform: 'none' }], { duration: 300, easing: EASE });
       return;
     }
-    switchWatch(w, from);
+    switchWatch(w);
   }
-  function switchWatch(w, from) {
-    var d = $('#dlgWatch'), main = $('#w-main'), stage = $('#w-stage'), list = $('#w-list');
-    var calm = still(), seq = ++WA.seq, L = listFor(w), same = L.key === WA.key, stack = stacked();
-    var meta = [$('#w-t'), $('#w-ch'), $('#w-desc')];
-    WA.now = w;
-    [].forEach.call(d.querySelectorAll('.w-ghost'), function (g) { g.remove(); });   // si había otro cambio en vuelo
-    [stage, list].concat(meta).forEach(function (el) { el.getAnimations().forEach(function (a) { a.cancel(); }); });
-    if (same) markNow(w.id);
-    // todo vuelve arriba, para ver el video y su título (en el celular, el video queda quieto arriba y vuelve lo de abajo)
-    var sc = stack ? $('#w-body') : main, b = stage.getBoundingClientRect(), top = stack ? b.top : b.top + sc.scrollTop;
-    sc.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' });
-    // 1. el que tocaste se hunde un poco: se nota que lo elegiste
-    if (from && !calm) from.animate([{ transform: 'scale(.95)' }, { transform: 'none' }], { duration: 380, easing: EASE });
-    // 2. su miniatura vuela hasta el lugar del video, que se apaga mientras tanto
-    var th = from && from.querySelector('.w-th img'), a = th && th.getBoundingClientRect();
-    var land = function () {
-      if (seq !== WA.seq) return false;
-      fillStage(w);
-      stage.getAnimations().forEach(function (x) { x.cancel(); });
-      return true;
-    };
-    if (!calm && a && a.width) {
-      var g = new Image();
-      g.className = 'w-ghost'; g.alt = ''; g.src = th.currentSrc || th.src;
-      g.style.cssText = 'left:' + b.left + 'px;top:' + top + 'px;width:' + b.width + 'px;height:' + b.height + 'px';
-      d.appendChild(g);
-      stage.animate([{ opacity: 1 }, { opacity: .25 }], { duration: 260, easing: 'ease-out', fill: 'forwards' });
-      g.animate([{ transform: 'translate(' + (a.left - b.left) + 'px,' + (a.top - top) + 'px) scale(' + (a.width / b.width) + ')' },
-        { transform: 'none' }], { duration: 560, easing: EASE })
-        .finished.then(function () {
-          if (!land()) return g.remove();
-          var img = $('#w-img');
-          (img.decode ? img.decode() : Promise.resolve()).catch(function () {}).then(function () {
-            g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, delay: 60, easing: 'ease-out', fill: 'forwards' }).finished.then(function () { g.remove(); });
-          });
-        }, function () { g.remove(); });
-    } else if (!calm) {
-      stage.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, fill: 'forwards' }).finished.then(function () {
-        if (land()) stage.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 280, easing: 'ease-out' });
-      }, function () {});
-    } else land();
-    // 3. los datos se van y vuelven con los del video nuevo, uno detrás del otro
-    if (calm) { fillMeta(w); fitDesc(); }
-    else {
-      meta.forEach(function (el) { el.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(6px)' }], { duration: 150, easing: 'ease-in', fill: 'forwards' }); });
-      setTimeout(function () {
-        if (seq !== WA.seq) return;
-        fillMeta(w); fitDesc();
-        meta.forEach(function (el, n) {
-          el.getAnimations().forEach(function (x) { x.cancel(); });
-          el.animate([{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }], { duration: 380, delay: 70 * n, easing: EASE, fill: 'backwards' });
-        });
-      }, 170);
-    }
-    // 4. la lista se rearma para el video nuevo: él primero y abajo los demás, con variedad
-    if (!same) {
-      var swap = function () { if (seq !== WA.seq) return false; fillList(L); markNow(w.id); list.scrollTop = 0; return true; };
-      if (calm) swap();
-      else list.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, fill: 'forwards' }).finished.then(function () {
-        if (!swap()) return;
-        list.getAnimations().forEach(function (x) { x.cancel(); });
-        list.animate([{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], { duration: 380, easing: EASE });
-      }, function () {});
-    }
+  function switchWatch(w) {                          // otro video: cambia directo, sin animación
+    WA.now = w; WA.seq++;
+    fillStage(w); fillMeta(w); fitDesc();
+    fillList(listFor(w)); $('#w-list').scrollTop = 0;
+    (stacked() ? $('#w-body') : $('#w-main')).scrollTop = 0;   // todo vuelve arriba, para ver el video y su título
+    autoPlay();
   }
   // La descripción arranca minimizada, como en YouTube: en la compu, los renglones que entran debajo del
   // canal (dos como mínimo); en el celular y la tablet, tres. Si no entra entera, termina en “…más”
@@ -689,10 +667,104 @@
   }
   window.addEventListener('resize', function () { if ($('#dlgWatch').open) fitDesc(); });
   $('#dlgWatch').addEventListener('close', function () {
-    WA.seq++;
+    if (WA.keep > 0) { WA.keep--; return; }           // se cerró para volver a abrirse, grande o chica: el video sigue
+    WA.seq++; setMini(false);
     stopHere($('#w-stage'));
-    [].forEach.call(this.querySelectorAll('.w-ghost'), function (g) { g.remove(); });
   });
+
+  // ---------------- mini reproductor, como el de YouTube ----------------
+  // Si cerrás el reproductor con un video horizontal sonando (con la cruz, tocando afuera o con Esc), sigue en
+  // uno chico: en la compu, abajo a la derecha, con los botones encima del video al pasar el mouse; en el
+  // celular, una barra abajo de todo, como en la app. Tocándolo se agranda de nuevo y la cruz lo cierra. Es la
+  // misma ventana, achicada, así que el video no se corta ni se recarga. Con YouTube, además, el play y la
+  // pausa y la barrita de cuánto va (el reproductor de YouTube avisa cómo va y acepta órdenes).
+  var WD = $('#dlgWatch'), YT = { f: null, ok: false, st: -1, t: 0, d: 0 }, miOn = null;
+  var MINI_ICON = { play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="currentColor"/></svg>' };
+  var isMini = function () { return WD.open && WD.classList.contains('mini'); };
+  var sounding = function () { return !!$('#w-stage iframe') && YT.st !== 0 && YT.st !== 2; };   // sin saberlo (Drive), cuenta como que suena
+  function setMini(on) { WD.classList.toggle('mini', on); if (!on) WD.classList.remove('ytoff'); document.documentElement.classList.toggle('has-mini', on); }
+  function reopen(mini) {                             // la misma ventana, grande o chica: el video sigue sonando
+    WA.keep++; WD.close(); setMini(mini);
+    if (mini) { WD.show(); miOn = null; paintMini(); try { PAGE.focus({ preventScroll: true }); } catch (e) {} }
+    else { show(WD); requestAnimationFrame(fitDesc); setTimeout(WB, 320); }
+    WB();
+  }
+  function closeWatch() { if (!isMini() && sounding()) reopen(true); else WD.close(); }
+  function hushMini() { if (!isMini()) return; if (YT.f && YT.ok) ytCmd('pauseVideo'); else WD.close(); }   // al abrir un vertical, el chico se calla
+  function paintMini() {
+    if (!isMini() || !WA.now) return;
+    $('#mi-t').textContent = WA.now.title; $('#mi-c').textContent = WA.now.who || '';
+    var on = YT.st === 1 || YT.st === 3, b = $('#mi-play');
+    b.hidden = $('#mi-bar').hidden = !YT.f || !YT.ok;
+    WD.classList.toggle('ytoff', !!YT.f && YT.ok && (YT.st === 2 || YT.st === 0));
+    if (miOn !== on) { miOn = on; b.innerHTML = on ? MINI_ICON.pause : MINI_ICON.play; b.setAttribute('aria-label', on ? 'Pausar' : 'Reproducir'); }
+    $('#mi-fill').style.width = YT.d ? Math.min(100, 100 * YT.t / YT.d).toFixed(2) + '%' : '0';
+  }
+  function miniAct(a) {
+    if (a === 'open') return reopen(false);
+    if (a === 'close') return WD.close();
+    if (a === 'play') ytCmd(YT.st === 1 || YT.st === 3 ? 'pauseVideo' : 'playVideo');
+  }
+  function ytCmd(fn) { try { YT.f.contentWindow.postMessage(JSON.stringify({ event: 'command', func: fn, args: [] }), '*'); } catch (e) {} }
+  function ytHook(f) {                                // le pide al reproductor que avise cómo va
+    YT = { f: f, ok: false, st: -1, t: 0, d: 0 };
+    var n = 0, hi = function () {
+      if (YT.f !== f || YT.ok || n++ > 25) return;
+      try { f.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*'); } catch (e) {}
+      setTimeout(hi, 400);
+    };
+    f.addEventListener('load', hi);
+  }
+  window.addEventListener('message', function (e) {
+    if (!YT.f || e.source !== YT.f.contentWindow) return;
+    var m; try { m = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch (x) { return; }
+    if (!m || !m.event) return;
+    YT.ok = true;
+    var i = m.info;
+    if (m.event === 'onStateChange' && typeof i === 'number') YT.st = i;
+    else if (i && typeof i === 'object') {
+      if (typeof i.playerState === 'number') YT.st = i.playerState;
+      if (typeof i.currentTime === 'number') YT.t = i.currentTime;
+      if (typeof i.duration === 'number') YT.d = i.duration;
+    }
+    paintMini();
+  });
+  // En la compu, el chico se arrastra a cualquier lado y al soltarlo va a la esquina más cercana (queda
+  // recordada). Un toque sin arrastrar lo agranda.
+  var MI = { c: 'br', drag: null, moved: false, swallow: false };
+  try { MI.c = localStorage.getItem('portfolio-mini') || 'br'; } catch (e) {}
+  function miCorner(c) { ['tl', 'tr', 'bl', 'br'].forEach(function (k) { WD.classList.toggle('c-' + k, k === c); }); }
+  miCorner(MI.c);
+  WD.addEventListener('pointerdown', function (e) {
+    if (!isMini() || stacked() || e.button !== 0 || e.target.closest('.mi-b')) return;
+    MI.drag = { x: e.clientX, y: e.clientY, r: WD.getBoundingClientRect(), id: e.pointerId }; MI.moved = false;
+  });
+  window.addEventListener('pointermove', function (e) {
+    var g = MI.drag;
+    if (!g || e.pointerId !== g.id) return;
+    var dx = e.clientX - g.x, dy = e.clientY - g.y;
+    if (!MI.moved) {
+      if (Math.abs(dx) + Math.abs(dy) < 6) return;
+      MI.moved = true; document.documentElement.classList.add('grabbing');
+      WD.getAnimations().forEach(function (a) { a.cancel(); });
+    }
+    dx = Math.max(-g.r.left, Math.min(innerWidth - g.r.right, dx)); dy = Math.max(-g.r.top, Math.min(innerHeight - g.r.bottom, dy));
+    WD.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+  });
+  function miDrop() {
+    var g = MI.drag; MI.drag = null;
+    if (!g || !MI.moved) return;
+    MI.moved = false; MI.swallow = true; setTimeout(function () { MI.swallow = false; });   // el clic de soltar no lo agranda
+    document.documentElement.classList.remove('grabbing');
+    var a = WD.getBoundingClientRect(), c = (a.top + a.height / 2 < innerHeight / 2 ? 't' : 'b') + (a.left + a.width / 2 < innerWidth / 2 ? 'l' : 'r');
+    WD.style.transform = ''; miCorner(c);
+    var b = WD.getBoundingClientRect();
+    if (!still()) WD.animate([{ transform: 'translate(' + (a.left - b.left) + 'px,' + (a.top - b.top) + 'px)' }, { transform: 'none' }], { duration: 280, easing: EASE });
+    MI.c = c; try { localStorage.setItem('portfolio-mini', c); } catch (x) {}
+  }
+  window.addEventListener('pointerup', miDrop); window.addEventListener('pointercancel', miDrop);
+  WD.addEventListener('cancel', function (e) { if (sounding()) { e.preventDefault(); setTimeout(function () { reopen(true); }); } });   // Esc
 
   // ---------------- en la compu, también se scrollea arrastrando, como con el dedo ----------------
   // Con el mouse se agarra la página, el reproductor o su lista y se los desliza para arriba o para abajo;
@@ -779,6 +851,7 @@
   // descripción con el título, las views y los likes, y el canal. En el celular, como Shorts: a pantalla
   // completa, con el canal, el título y la descripción sobre el video y los likes y las views a la derecha.
   var SH = { d: $('#dlgShorts'), feed: $('#sh-feed'), items: [], i: -1, mt: 0 };
+  var SB = ownBar(SH.d, function () { var it = SH.items[SH.i]; return it && it.querySelector('.sh-pan .d-txt'); });   // la barra propia: la descripción
   var ICON = {
     like: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19.6s-7.3-4.4-7.3-9.9A4.1 4.1 0 0 1 12 7.2a4.1 4.1 0 0 1 7.3 2.5c0 5.5-7.3 9.9-7.3 9.9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
     views: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.8v12.4L18.4 12z" fill="currentColor"/></svg>'
@@ -808,13 +881,14 @@
   function openShorts(id) {
     var w = byId[id];
     if (!w || vs.indexOf(w) < 0) return;
+    hushMini();
     SH.feed.innerHTML = mix(w, vs).map(shortItem).join('');
     SH.items = [].slice.call(SH.feed.children);
     SH.i = -1;
     show(SH.d);
     SH.mt = parseFloat(getComputedStyle(SH.items[0]).scrollMarginTop) || 0;
     SH.feed.scrollTop = 0;
-    shActive(0);
+    shActive(0); setTimeout(SB, 320);
   }
   function shIndex() {                                   // el que quedó en el centro
     var top = SH.feed.scrollTop + SH.mt, best = 0, dd = Infinity;
@@ -833,8 +907,11 @@
     var it = SH.items[n];
     if (!it) return;
     it.classList.add('on');
+    var pb = it.querySelector('.sh-v .play'), sw = byId[it.dataset.short];   // el que queda en pantalla arranca solo
+    if (LIVE && pb && !pb.hidden && sw && embedOf(sw)) playHere(pb, pb.closest('.sh-v'), sw);
     var btns = SH.d.querySelectorAll('.sh-nav button');
     btns[0].disabled = n === 0; btns[1].disabled = n === SH.items.length - 1;
+    SB();
   }
   function shGo(n, fast) {
     n = Math.max(0, Math.min(SH.items.length - 1, n));
@@ -902,6 +979,7 @@
 
   document.addEventListener('click', function (e) {
     var t = e.target, el;
+    if (MI.swallow) { MI.swallow = false; return; }                // soltando el mini reproductor después de moverlo
     if (t.closest('#top-t')) { e.preventDefault(); return toEnd(); }  // el título de la barra: hasta abajo de todo o, si ya estás abajo, arriba
     if ((el = t.closest('a[href^="#"]'))) {
       var id = el.getAttribute('href').slice(1);
@@ -912,16 +990,21 @@
       var open = $('#w-desc').classList.toggle('open');
       el.textContent = open ? 'Mostrar menos' : '…más';
       if (!open) fitDesc();
+      WB();
       return;
     }
+    if ((el = t.closest('[data-mini]'))) return miniAct(el.dataset.mini);              // el mini reproductor
     if ((el = t.closest('[data-watch]'))) return openWatch(el.dataset.watch, el);   // de la lista del reproductor
     if ((el = t.closest('.sh-it:not(.on)'))) return shGo(SH.items.indexOf(el));     // el de abajo (o arriba): pasa a ese
     if (t.closest('.sh-dx')) return;                                                  // leyendo la descripción: no es play
     if ((el = t.closest('.sh-v .play'))) return playHere(el, el.closest('.sh-v'), byId[el.closest('.sh-it').dataset.short]);
     if ((el = t.closest('[data-sh]'))) return shGo(SH.i + (+el.dataset.sh));
     if ((el = t.closest('[data-work]'))) return openWork(el.dataset.work);
-    if (t.closest('[data-close]')) return t.closest('dialog').close();
-    if (t.tagName === 'DIALOG' || t === SH.feed) return t.closest('dialog').close();   // clic afuera
+    if (t.closest('[data-close]')) { el = t.closest('dialog'); return el === WD ? closeWatch() : el.close(); }
+    if (t.tagName === 'DIALOG' || t === SH.feed) {                                  // clic afuera
+      el = t.closest('dialog');
+      return el === WD ? (isMini() ? reopen(false) : closeWatch()) : el.close();
+    }
   });
 
   // el título de la barra: baja hasta el final de la página y, si ya estás abajo de todo, sube al principio
@@ -973,7 +1056,9 @@
     if (!yt) Object.keys(channels).forEach(function (k) { var sn = channels[k].snippet; if (handle && String(sn.customUrl || '').toLowerCase() === handle.toLowerCase()) yt = channels[k]; });
     var url = 'https://www.youtube.com/' + handle, st = yt && yt.statistics;
     $('#ch-n').textContent = ch.name || (yt && yt.snippet.title) || '';
-    $('#ch-img').src = ch.photo || (yt && yt.snippet.thumbnails.medium.url) || '';
+    var tn = yt && yt.snippet.thumbnails, yav = tn ? ((tn.high || tn.medium || tn.default || {}).url || '') : '', img = $('#ch-img');
+    img.onerror = function () { if (yav && img.src !== yav) img.src = yav; };   // si la foto de la planilla no carga (un link vencido o privado), va la del canal
+    img.src = ch.photo || yav;
     $('#ch-av').href = url;
     // los suscriptores, de YouTube (salvo que el canal los esconda); los videos, todos los trabajos de la página
     var subs = st && !st.hiddenSubscriberCount && st.subscriberCount != null ? +st.subscriberCount : null, n = works.length;
@@ -990,12 +1075,51 @@
     $('#ch-l').hidden = !links.length;
     $('#canal').hidden = !(ch.name || ch.description || yt);
   }
-  loadConfig().then(function (c) { renderTop(c); renderChannel(c); });
+  loadConfig().then(function (c) { renderTop(c); renderChannel(c); $('#canal').classList.add('in'); });   // aparece suave
   var badge = document.querySelector('.proto');      // abajo a la izquierda: con datos de ejemplo, o qué no respondió
   if (badge) {
     if (M.warn) { badge.textContent = M.warn; badge.classList.add('warn'); }
     badge.hidden = LIVE && !M.warn;
   }
+  // ---------------- el canal se vuelve la barra de arriba ----------------
+  // Arriba de todo no hay barra: está el canal entero. Al bajar, el canal se va achicando con el scroll hasta ser
+  // una barra como la de antes, pegada arriba de todo: la foto chica y el nombre a la izquierda, y a la derecha
+  // los íconos de la barra (Discord, Instagram y YouTube). Lo demás del canal se apaga. Al subir, se agranda de
+  // nuevo. En la barra, tocando el nombre vuelve arriba.
+  (function () {
+    var ch = $('#canal'), avw = $('#ch-avw'), nm = $('#ch-n'), G = null, raf = 0;
+    var px = function (css) {                          // cuánto mide algo de CSS (la barra, la muesca del celular)
+      var d = document.createElement('div'); d.style.cssText = 'position:absolute;visibility:hidden;height:' + css;
+      document.body.appendChild(d); var h = d.offsetHeight; d.remove(); return h;
+    };
+    function measure() {
+      if (ch.hidden || !ch.offsetHeight) { G = null; return; }
+      var cs = getComputedStyle(ch), ns = getComputedStyle(nm), fs = parseFloat(ns.fontSize) || 36, lh = parseFloat(ns.lineHeight) || fs * 1.2;
+      var bar = px('var(--barH)'), notch = px('env(safe-area-inset-top, 0px)'), D = Math.max(0, ch.offsetHeight - bar);
+      var L = parseFloat(cs.paddingLeft) || 16, mid = D + notch + (bar - notch) / 2, AV = 32, k = 18 / fs;   // en la barra: la foto de 32 y el nombre de 18
+      G = { D: D, ax: avw.offsetLeft, ay: avw.offsetTop, as: avw.offsetWidth || 1, nx: nm.offsetLeft, ny: nm.offsetTop, k: k,
+        tax: L, tay: mid - AV / 2, ts: AV, tnx: L + AV + 12, tny: mid - lh * k / 2 };
+      ch.style.setProperty('--chD', D + 'px'); ch.style.setProperty('--chPR', (parseFloat(cs.paddingRight) || 16) + 'px');
+      paint();
+    }
+    function paint() {
+      raf = 0;
+      if (!G) return;
+      var p = G.D ? Math.max(0, Math.min(1, PAGE.scrollTop / G.D)) : 0, q = function (a, b) { return a + (b - a) * p; };
+      var set = function (k, v) { ch.style.setProperty(k, v); };
+      set('--avx', q(0, G.tax - G.ax).toFixed(1) + 'px'); set('--avy', q(0, G.tay - G.ay).toFixed(1) + 'px'); set('--avs', q(1, G.ts / G.as).toFixed(4));
+      set('--nx', q(0, G.tnx - G.nx).toFixed(1) + 'px'); set('--ny', q(0, G.tny - G.ny).toFixed(1) + 'px'); set('--ns', q(1, G.k).toFixed(4));
+      set('--chR', Math.max(0, 1 - p * 2.2).toFixed(3));                       // lo demás se apaga primero
+      set('--chB', Math.max(0, Math.min(1, (p - .55) / .45)).toFixed(3));       // el fondo de barra, al final
+      set('--chI', Math.max(0, Math.min(1, (p - .7) / .3)).toFixed(3));         // los íconos, al final
+      ch.classList.toggle('gone', p > .45); ch.classList.toggle('bar', p > .98);
+    }
+    PAGE.addEventListener('scroll', function () { if (!raf) raf = requestAnimationFrame(paint); }, { passive: true });
+    window.addEventListener('resize', measure);
+    if (window.ResizeObserver) new ResizeObserver(function () { measure(); }).observe(ch);
+    measure();
+    nm.addEventListener('click', function () { if (ch.classList.contains('bar')) PAGE.scrollTo({ top: 0, behavior: still() ? 'auto' : 'smooth' }); });
+  })();
   // el link del título apunta adonde va: al pie o, abajo de todo, al principio
   var bar = $('#topbar'), titleHref = function () { $('#top-t').setAttribute('href', atEnd() ? '#top' : '#pie'); };
   PAGE.addEventListener('scroll', titleHref, { passive: true }); titleHref();
@@ -1006,6 +1130,59 @@
     PAGE.style.scrollBehavior = 'auto'; PAGE.scrollTop += e.deltaY * k; PAGE.style.removeProperty('scroll-behavior');
   };
   bar.addEventListener('wheel', wheelToPage, { passive: true });
+
+  // ---------------- la barra de scroll propia, adentro de las ventanas ----------------
+  // La misma de la página, sobre el borde derecho de lo que se desliza adentro de una ventana: la lista del
+  // reproductor (en el celular, todo lo de abajo del video) y la descripción de los verticales. get() dice cuál
+  // es en cada momento; devuelve con qué avisarle que cambió lo de adentro.
+  function ownBar(host, get) {
+    var rail = document.createElement('div'), knob = document.createElement('div');
+    rail.className = 'sbar in'; knob.className = 'sbar-k'; rail.setAttribute('aria-hidden', 'true'); rail.hidden = true;
+    rail.appendChild(knob); host.appendChild(rail);
+    var drag = null, raf = 0, nap = 0, sc = null;
+    var max = function () { return sc ? sc.scrollHeight - sc.clientHeight : 0; };
+    function size() {
+      sc = host.open ? get() : null;
+      var b = sc && sc.getBoundingClientRect(), m = max();
+      rail.hidden = !b || !b.height || m <= 1;
+      if (rail.hidden) return;
+      var H = Math.max(0, b.height - 6), kh = Math.max(36, Math.round(H * sc.clientHeight / sc.scrollHeight));
+      rail.style.top = (b.top + 3) + 'px'; rail.style.left = (b.right - 14) + 'px'; rail.style.height = H + 'px';
+      knob.style.height = kh + 'px';
+      knob.style.transform = 'translateY(' + ((H - kh) * sc.scrollTop / m).toFixed(1) + 'px)';
+    }
+    var later = function () { if (!raf) raf = requestAnimationFrame(function () { raf = 0; size(); }); };
+    host.addEventListener('scroll', function (e) {     // también si se mueve lo de afuera (los verticales)
+      later();
+      if (e.target !== get()) return;
+      rail.classList.add('on');
+      clearTimeout(nap); nap = setTimeout(function () { rail.classList.remove('on'); }, 900);
+    }, true);
+    window.addEventListener('resize', later);
+    knob.addEventListener('pointerdown', function (e) {                      // arrastrar la perilla
+      if (e.button !== 0 || !sc) return;
+      e.preventDefault(); e.stopPropagation();
+      drag = { y: e.clientY, top: sc.scrollTop };
+      try { knob.setPointerCapture(e.pointerId); } catch (x) {}
+      rail.classList.add('drag');
+    });
+    knob.addEventListener('pointermove', function (e) {
+      if (drag && sc) sc.scrollTop = drag.top + (e.clientY - drag.y) * max() / Math.max(1, rail.clientHeight - knob.offsetHeight);
+    });
+    var end = function () { if (!drag) return; drag = null; rail.classList.remove('drag'); };
+    knob.addEventListener('pointerup', end); knob.addEventListener('pointercancel', end);
+    rail.addEventListener('pointerdown', function (e) {                      // tocar el riel: salta hasta ahí
+      if (e.target !== rail || e.button !== 0 || !sc) return;
+      e.stopPropagation();
+      var r = rail.getBoundingClientRect(), kh = knob.offsetHeight;
+      var f = Math.max(0, Math.min(1, (e.clientY - r.top - kh / 2) / Math.max(1, r.height - kh)));
+      sc.scrollTo({ top: f * max(), behavior: still() ? 'auto' : 'smooth' });
+    });
+    rail.addEventListener('wheel', function (e) {
+      if (sc && !e.ctrlKey && e.deltaY) sc.scrollTop += e.deltaY * (e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? sc.clientHeight : 1);
+    }, { passive: true });
+    return later;
+  }
 
   // ---------------- la barra de scroll propia ----------------
   // La del sistema no se ve: esta arranca justo debajo de la barra de arriba y llega hasta abajo. La perilla

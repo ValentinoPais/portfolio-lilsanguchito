@@ -41,7 +41,7 @@
 * { box-sizing: border-box; }
 html { height: 100%; background: var(--bg); overflow: hidden; }   /* la página entera no se desliza: se desliza el contenedor de los videos y el pie */
 body { margin: 0; height: 100%; position: relative; overflow: hidden; background: var(--bg); color: var(--text); font: 400 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }   /* sin el margen del navegador: los videos van al margen mínimo del borde */
-.page { height: 100%; overflow-x: hidden; overflow-y: auto; scroll-behavior: smooth; padding: var(--barH) var(--gut) 0; outline: none; }   /* lo único que se desliza: los videos y el pie, que pasan por debajo de la barra de arriba. Lo que se agranda con el mouse encima, en los costados, no abre una barra de costado */
+.page { height: 100%; overflow-x: hidden; overflow-y: auto; scroll-behavior: smooth; scroll-padding-top: var(--barH); padding: 0 var(--gut); outline: none; }   /* lo único que se desliza: los videos y el pie, que pasan por debajo de la barra de arriba. Lo que se agranda con el mouse encima, en los costados, no abre una barra de costado */
 /* la barra de scroll: la del sistema no se ve y va una propia, que arranca justo debajo de la barra de arriba,
    como si esa fuera una pieza aparte, y llega hasta abajo de todo. Fina y clara; con el mouse encima se
    ensancha y se puede arrastrar, y tocando el riel salta hasta ahí. En el celular aparece solo al deslizar */
@@ -82,8 +82,20 @@ img { display: block; max-width: 100%; }
    descripción entera y las redes. Todo lo demás sale de la config. En pantallas grandes va al
    centro, alineado con los videos y con margen a los costados; si no, al mismo margen que la barra de arriba.
    Una línea fina, de lado a lado, lo separa de los videos */
-.ch { display: flex; align-items: flex-start; gap: 24px; margin: 0 calc(-1 * var(--gut)); padding: 24px max(16px, (100% - var(--maxW)) / 2 + var(--gut)) 28px; border-bottom: 1px solid var(--line); }
-.ch-av { flex: none; width: 160px; height: 160px; border-radius: 50%; overflow: hidden; background: var(--bg3); box-shadow: 0 0 0 1px var(--line); }
+.ch { display: flex; align-items: flex-start; gap: 24px; margin: 0 calc(-1 * var(--gut)); padding: calc(24px + env(safe-area-inset-top, 0px)) max(16px, (100% - var(--maxW)) / 2 + var(--gut)) 28px; border-bottom: 1px solid var(--line); }
+/* arriba de todo no hay barra: está el canal entero. Al bajar se achica hasta ser una barra como la de antes y
+   queda pegado arriba, con su franja de abajo a la vista: la foto chica y el nombre van a la franja, lo demás se
+   apaga y aparecen los íconos y el fondo de barra (app.js lo va moviendo con el scroll) */
+.ch { position: sticky; top: calc(-1 * var(--chD, 0px)); z-index: 10; background: rgba(11, 11, 10, calc(.74 * var(--chB, 0))); -webkit-backdrop-filter: blur(calc(20px * var(--chB, 0))) saturate(calc(1 + .3 * var(--chB, 0))); backdrop-filter: blur(calc(20px * var(--chB, 0))) saturate(calc(1 + .3 * var(--chB, 0))); }
+#topbar[hidden] { display: none; }   /* ya no hay barra fija: es el canal, achicado */
+.ch-avw { flex: none; transform-origin: 0 0; transform: translate(var(--avx, 0px), var(--avy, 0px)) scale(var(--avs, 1)); }
+.ch-n { transform-origin: 0 0; transform: translate(var(--nx, 0px), var(--ny, 0px)) scale(var(--ns, 1)); }
+.ch-s, .ch-d, .ch-l { opacity: var(--chR, 1); }
+.ch.gone .ch-s, .ch.gone .ch-d, .ch.gone .ch-l { visibility: hidden; }
+.ch .top-links { position: absolute; z-index: 1; right: var(--chPR, 16px); top: calc(var(--chD, 0px) + env(safe-area-inset-top, 0px) + 8px); opacity: var(--chI, 0); }
+.ch:not(.gone) .top-links { visibility: hidden; }
+.ch.bar .ch-n { cursor: pointer; }   /* en la barra, el nombre vuelve arriba */
+.ch-av { display: block; flex: none; width: 160px; height: 160px; border-radius: 50%; overflow: hidden; background: var(--bg3); box-shadow: 0 0 0 1px var(--line); }
 .ch-av img { width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; }
 .ch-t { min-width: 0; max-width: 760px; padding-top: 8px; }
 .ch-n { margin: 0 0 6px; font: 700 36px/44px var(--sans); letter-spacing: -.01em; overflow-wrap: anywhere; }
@@ -99,8 +111,9 @@ img { display: block; max-width: 100%; }
 @media (max-width: 759px) { .ch-av { width: 120px; height: 120px; } .ch-n { font-size: 30px; line-height: 38px; } }
 /* celular, como la app de YouTube: la foto a la izquierda del nombre y, debajo, todo lo demás a lo ancho */
 @media (max-width: 599px) {
-  .ch { display: grid; grid-template-columns: 72px minmax(0, 1fr); column-gap: 16px; row-gap: 12px; align-items: center; padding: 16px 16px 20px; }
-  .ch-av { grid-row: 1 / span 2; width: 72px; height: 72px; }
+  .ch { display: grid; grid-template-columns: 72px minmax(0, 1fr); column-gap: 16px; row-gap: 12px; align-items: center; padding: calc(16px + env(safe-area-inset-top, 0px)) 16px 20px; }
+  .ch-avw { grid-row: 1 / span 2; }
+  .ch-av { width: 72px; height: 72px; }
   .ch-t { display: contents; }
   .ch-n { grid-column: 2; align-self: end; margin: 0; font-size: 24px; line-height: 30px; }
   .ch-s { grid-column: 2; align-self: start; margin: 0; font-size: 12px; line-height: 18px; }
@@ -242,7 +255,10 @@ dialog.watch .panel { --side: 360px; --meta: 148px; --stage: min(100vw - 2 * var
 .w-main::-webkit-scrollbar { display: none; }
 .w-main .stage { flex: none; width: 100%; }
 .w-body { display: contents; }   /* en la compu, el título, el canal y la descripción siguen en la columna del video */
-.w-t { flex: none; margin: 8px 0 0; font: 700 20px/28px var(--sans); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.w-t { position: relative; flex: none; width: fit-content; max-width: 100%; margin: 8px 0 0; font: 700 20px/28px var(--sans); }
+.w-tl { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }   /* el título lleva al original (YouTube o Drive) */
+.w-t::after { content: attr(data-tip); position: absolute; z-index: 6; top: calc(100% + 6px); left: var(--tx, 50%); transform: translateX(-50%); padding: 7px 12px; border-radius: 999px; background: var(--text); color: #0f0f0f; font: 500 12px/1 var(--sans); white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .15s; box-shadow: 0 8px 20px -8px rgba(0, 0, 0, .9); }   /* el cartel, debajo del mouse */
+@media (hover: hover) { .w-t:hover::after { opacity: 1; } }
 .w-ch { flex: none; display: flex; align-items: center; gap: 8px 12px; margin-top: 8px; }
 .w-chl { display: flex; align-items: center; gap: 12px; min-width: 0; margin-right: auto; }
 .w-av { flex: none; width: 40px; height: 40px; border-radius: 50%; overflow: hidden; background: var(--bg3); box-shadow: 0 0 0 1px var(--line); }
@@ -266,31 +282,86 @@ dialog.watch .panel { --side: 360px; --meta: 148px; --stage: min(100vw - 2 * var
 .w-desc.cut:not(.open) .d-more { position: absolute; right: 0; bottom: 0; margin: 0; padding-left: 44px; background: linear-gradient(90deg, rgba(29, 29, 27, 0), var(--bg3) 40px); }
 .w-side { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .w-sh { flex: none; display: flex; align-items: center; min-height: 36px; padding-right: 44px; margin-bottom: 0; font: 700 16px/22px var(--sans); }
+.w-side .chips { flex: none; max-width: none; margin: 4px 0 8px; }   /* los temas, arriba de la lista, como los de la página */
+.w-side .chip-r { margin: -4px; padding: 4px; scroll-padding-inline: 0; }   /* alineados con el título de la lista, también en el celular */
+.w-side .chip-a.prev { background: linear-gradient(to right, var(--bg2) 50%, rgba(21, 21, 20, 0)); }
+.w-side .chip-a.next { background: linear-gradient(to left, var(--bg2) 50%, rgba(21, 21, 20, 0)); }
 .w-x { position: absolute; top: var(--gut); right: var(--gut); z-index: 2; background: var(--bg2); }
-.w-list { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); align-content: start; gap: var(--gut); padding: var(--gut); margin: 0 calc(-1 * var(--gut)) calc(-1 * var(--gut)); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; cursor: grab; user-select: none; }
-/* la barra de scroll, siempre a la vista y pegada al borde (con estilo propio no se esconde en la Mac) */
-.w-list::-webkit-scrollbar, .w-body::-webkit-scrollbar, .sh-pan .d-txt::-webkit-scrollbar { width: 6px; }
-.w-list::-webkit-scrollbar-thumb, .w-body::-webkit-scrollbar-thumb, .sh-pan .d-txt::-webkit-scrollbar-thumb { background: #3b3b38; }
-.w-list::-webkit-scrollbar-thumb:hover, .w-body::-webkit-scrollbar-thumb:hover, .sh-pan .d-txt::-webkit-scrollbar-thumb:hover { background: var(--muted); }
-.w-list::-webkit-scrollbar-track, .w-body::-webkit-scrollbar-track, .sh-pan .d-txt::-webkit-scrollbar-track { background: transparent; }
-@supports not selector(::-webkit-scrollbar) { .w-list, .w-body, .sh-pan .d-txt { scrollbar-width: thin; scrollbar-color: #3b3b38 transparent; } }
+.w-list { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); align-content: start; gap: var(--gut); padding: var(--gut) 14px var(--gut) var(--gut); margin: 0 calc(-1 * var(--gut)) calc(-1 * var(--gut)); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; cursor: grab; user-select: none; }
+/* adentro de las ventanas, la barra de scroll también es la propia, la misma de la página (la del sistema no se ve) */
+.w-list, .w-body, .sh-pan .d-txt { scrollbar-width: none; }
+.w-list::-webkit-scrollbar, .w-body::-webkit-scrollbar, .sh-pan .d-txt::-webkit-scrollbar { display: none; }
+.sbar.in { right: auto; bottom: auto; }   /* sobre el borde derecho de lo que se desliza: la ubica app.js */
 .w-list.dragging { cursor: grabbing; }
 html.grabbing, html.grabbing * { cursor: grabbing !important; -webkit-user-select: none !important; user-select: none !important; }   /* arrastrando con el mouse, como con el dedo */
 .w-it { position: relative; display: grid; grid-template-columns: max(140px, 42%) minmax(0, 1fr); gap: 8px; align-items: start; width: 100%; }
 .w-it { transition: background-color .2s, box-shadow .2s; }
-.w-it:focus-visible:not(.now) { background: var(--hl); box-shadow: 0 0 0 var(--gut) var(--hl); }
+.w-it:focus-visible { background: var(--hl); box-shadow: 0 0 0 var(--gut) var(--hl); }
 .w-list.dragging .w-it { cursor: grabbing; }
 .w-th { position: relative; display: block; overflow: hidden; background: var(--bg3); }
 .w-th img { width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; }
-/* el que está en pantalla queda marcado en la lista, en su lugar: así la lista no salta al cambiar */
-.w-th::before { content: "Viendo"; position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; background: rgba(11, 11, 10, .64); box-shadow: inset 0 0 0 2px var(--acc); font: 500 11px/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--text); opacity: 0; transition: opacity .35s; pointer-events: none; }
-.w-it.now .w-th::before { opacity: 1; }
-.w-it.now { cursor: default; }
 .w-it-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .w-it-ttl { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font: 500 14px/20px var(--sans); color: var(--text); margin-bottom: 2px; }
 .w-it-s { font: 400 12px/18px var(--sans); color: var(--muted); }
-/* al cambiar de video, la miniatura que tocaste vuela hasta el lugar del video */
-.w-ghost { position: fixed; z-index: 20; margin: 0; object-fit: cover; transform-origin: 0 0; pointer-events: none; outline: 2px solid var(--acc); outline-offset: -2px; box-shadow: 0 30px 70px -24px rgba(0, 0, 0, .95); will-change: transform; }   /* con el borde violeta: es lo que tocaste */
+
+/* las imágenes aparecen suave cuando terminan de cargar, sobre su caja vacía (no de golpe); el canal y los videos,
+   también, cuando llegan los datos */
+.thumb img, .w-th img, .stage img, .sh-v img, .yt-av img, .w-av img, .sh-av img, .ch-av img { opacity: 0; transition: opacity .45s ease; }
+.thumb img.ok, .w-th img.ok, .stage img.ok, .sh-v img.ok, .yt-av img.ok, .w-av img.ok, .sh-av img.ok, .ch-av img.ok { opacity: 1; }
+#canal.in, #trabajos.in { animation: feed-in .45s ease both; }
+
+/* mini reproductor, como el de YouTube: si cerrás el reproductor con un video horizontal sonando, sigue en uno
+   chico abajo a la derecha (en el celular, una barra abajo de todo, como en la app). Es la misma ventana,
+   achicada: el video no se corta */
+.mini-ui, .mi-over { display: none; }
+dialog.watch.mini { --miW: min(400px, 100vw - 32px); position: fixed; inset: auto 16px 16px auto; width: var(--miW); height: auto; max-height: none; padding: 0; overflow: visible; z-index: 30; }
+dialog.watch.mini > .panel { display: block; position: relative; width: 100%; height: auto; max-height: none; padding: 0; overflow: hidden; animation: none; box-shadow: 0 18px 50px -14px rgba(0, 0, 0, .95); }
+dialog.watch.mini .w-main { display: block; width: auto; margin: 0; padding: 0; overflow: hidden; }
+dialog.watch.mini .w-body, dialog.watch.mini .w-side, dialog.watch.mini .w-x, dialog.watch.mini .stage .play, dialog.watch.mini .stage .dur { display: none; }
+dialog.watch.mini .mini-ui { display: block; }
+dialog.watch.mini .mi-over { display: block; position: absolute; inset: 0; z-index: 5; cursor: pointer; background: linear-gradient(rgba(0, 0, 0, .6), rgba(0, 0, 0, 0) 32%, rgba(0, 0, 0, 0) 68%, rgba(0, 0, 0, .6)); opacity: 0; transition: opacity .15s; }
+.mi-info { display: flex; flex-direction: column; min-width: 0; padding: 10px 12px 12px; cursor: pointer; }
+.mi-t { font: 500 14px/20px var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mi-c { font: 400 12px/18px var(--sans); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mi-b { position: absolute; z-index: 6; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: none; color: #fff; cursor: pointer; opacity: 0; transition: opacity .15s, background-color .2s; }
+.mi-b[hidden], .mi-bar[hidden] { display: none; }
+.mi-b svg { width: 24px; height: 24px; }
+.mi-x { top: 6px; right: 6px; }
+.mi-play { top: calc((var(--miW) - 2px) * 9 / 32 - 28px); left: calc(50% - 28px); width: 56px; height: 56px; }
+.mi-play svg { width: 36px; height: 36px; }
+.mi-bar { position: absolute; z-index: 6; left: 0; right: 0; top: calc((var(--miW) - 2px) * 9 / 16 - 3px); height: 3px; background: rgba(255, 255, 255, .2); pointer-events: none; }
+.mi-bar i { display: block; width: 0; height: 100%; background: var(--acc); }
+dialog.watch.mini .panel:hover .mi-over, dialog.watch.mini .panel:hover .mi-b, dialog.watch.mini .panel:focus-within .mi-b { opacity: 1; }
+@media (hover: hover) {
+  .mi-b:hover { background: rgba(255, 255, 255, .14); }
+  dialog.watch.mini > .panel:hover { background-image: linear-gradient(var(--hl), var(--hl)); }   /* con el mouse encima, se ilumina entero, como las tarjetas */
+}
+dialog.watch.mini > .panel { cursor: pointer; touch-action: none; }   /* tocándolo se agranda; arrastrándolo, se mueve */
+/* se mueve arrastrándolo y queda en la esquina más cercana */
+dialog.watch.mini.c-bl { inset: auto auto 16px 16px; }
+dialog.watch.mini.c-tr { inset: calc(var(--barH) + 16px) 16px auto auto; }
+dialog.watch.mini.c-tl { inset: calc(var(--barH) + 16px) auto auto 16px; }
+/* los controles de YouTube (arriba y abajo del video) quedan afuera: se maneja solo con los de encima. En pausa o
+   al terminar, en vez de la pantalla de pausa de YouTube, la miniatura */
+dialog.watch.mini .stage iframe { top: -60px; bottom: auto; height: calc(100% + 120px); }
+dialog.watch.mini.ytoff .stage iframe { visibility: hidden; }
+@media (hover: none) { dialog.watch.mini .mi-b { opacity: 1; } }
+@media (max-width: 1000px) {   /* en el celular y la tablet, como en la app: una barra abajo de todo */
+  dialog.watch.mini, dialog.watch.mini[class*="c-"] { --miH: 64px; inset: auto 0 0 0; width: 100%; }
+  dialog.watch.mini > .panel { touch-action: auto; }
+  dialog.watch.mini > .panel { display: flex; flex-direction: row; align-items: center; gap: 0; padding: 0 0 env(safe-area-inset-bottom, 0px); border-width: 1px 0 0; box-shadow: none; }
+  dialog.watch.mini .w-main { display: contents; }
+  dialog.watch.mini .w-main .stage { flex: none; width: calc(var(--miH) * 16 / 9); height: var(--miH); margin: 0; box-shadow: none; clip-path: none; }
+  dialog.watch.mini .mi-over { background: none; opacity: 1; }
+  dialog.watch.mini .mini-ui { display: flex; align-items: center; flex: 1; min-width: 0; height: var(--miH); }
+  .mi-info { flex: 1; padding: 0 4px 0 12px; }
+  .mi-b { position: static; flex: none; width: 48px; height: 48px; opacity: 1; }
+  .mi-play svg { width: 28px; height: 28px; }
+  .mi-bar { top: auto; bottom: env(safe-area-inset-bottom, 0px); height: 2px; }
+  html.has-mini .page { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }   /* el final de la página no queda tapado */
+  html.has-mini .sbar:not(.in) { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+  html.has-mini .proto { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+}
 
 /* V2 · verticales, como Shorts: uno por pantalla, con el anterior asomando arriba y el siguiente abajo,
    más oscuros. El play, al centro; al lado, siempre abierta, la descripción con el título, las views y los
@@ -432,28 +503,29 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) {
   .page { scroll-behavior: auto; }
   .work, .yt-av, .w-av, .sh-av, .ch-av, .w-it, .top, .sh-v, .sh-act, .sh-pan, .sh-info, .chip, .feed.swap { transition: none; animation: none; }
+  .thumb img, .w-th img, .stage img, .sh-v img, .yt-av img, .w-av img, .sh-av img, .ch-av img, #canal.in, #trabajos.in, .w-t::after { transition: none; animation: none; }
   .chip-r { scroll-behavior: auto; }
   dialog.dlg[open]::backdrop, dialog.watch[open] > .panel, dialog.shorts[open] > .sh-feed { animation: none; }
 }
 </style>
 </head>
 <body>
-<header class="top" id="topbar">
+<header class="top" id="topbar" hidden>
   <a class="top-t" id="top-t" href="#pie">Sanguchito</a>
-  <nav class="top-links" id="top-links" aria-label="Discord, Instagram y YouTube"></nav>
 </header>
 
 <div class="page" id="page" tabindex="-1">
 <main id="top" lang="es">
   <!-- el canal, como el encabezado de un canal de YouTube: sale de la config -->
   <section class="ch" id="canal" aria-labelledby="ch-n">
-    <a class="ch-av" id="ch-av" target="_blank" rel="noopener" draggable="false" aria-label="El canal en YouTube"><img id="ch-img" alt=""></a>
+    <div class="ch-avw" id="ch-avw"><a class="ch-av" id="ch-av" target="_blank" rel="noopener" draggable="false" aria-label="El canal en YouTube"><img id="ch-img" alt=""></a></div>
     <div class="ch-t">
       <h1 class="ch-n" id="ch-n"></h1>
       <p class="ch-s" id="ch-s"></p>
       <p class="ch-d" id="ch-d"></p>
       <p class="ch-l" id="ch-l"></p>
     </div>
+    <nav class="top-links" id="top-links" aria-label="Discord, Instagram y YouTube"></nav>
   </section>
   <section class="sec" id="trabajos" aria-labelledby="h-all">
     <h2 class="sr" id="h-all">Trabajos</h2>
@@ -479,15 +551,26 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
 <dialog class="dlg watch" id="dlgWatch" aria-labelledby="w-t">
   <div class="panel" tabindex="-1" autofocus>
     <div class="w-main" id="w-main">
-      <div class="stage h" id="w-stage"><img id="w-img" alt=""><span class="dur" id="w-dur"></span><button class="play" id="w-play" type="button" aria-label="Reproducir"><span>▶</span></button></div>
+      <div class="stage h" id="w-stage"><img id="w-img" alt=""><span class="dur" id="w-dur"></span><button class="play" id="w-play" type="button" aria-label="Reproducir"><span>▶</span></button><div class="mi-over" data-mini="open" aria-hidden="true"></div></div>
       <div class="w-body" id="w-body">
         <h2 class="w-t" id="w-t"></h2>
         <div class="w-ch" id="w-ch"></div>
         <div class="w-desc" id="w-desc"></div>
       </div>
     </div>
+    <div class="mini-ui" id="w-mini">
+      <div class="mi-info" data-mini="open"><b class="mi-t" id="mi-t"></b><span class="mi-c" id="mi-c"></span></div>
+      <button class="mi-b mi-play" id="mi-play" type="button" data-mini="play" aria-label="Pausar" hidden></button>
+      <button class="mi-b mi-x" type="button" data-mini="close" aria-label="Cerrar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg></button>
+      <i class="mi-bar" id="mi-bar" hidden><i id="mi-fill"></i></i>
+    </div>
     <aside class="w-side" aria-labelledby="w-more">
       <div class="w-sh" id="w-more"></div>
+      <div class="chips" id="w-chips" hidden>
+        <button class="chip-a prev" type="button" tabindex="-1" aria-label="Temas anteriores"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.6 5.6 16 7l-5 5 5 5-1.4 1.4L8.2 12z" fill="currentColor"/></svg></i></button>
+        <div class="chip-r" id="w-chip-r" role="group" aria-label="Temas"></div>
+        <button class="chip-a next" type="button" tabindex="-1" aria-label="Más temas"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.4 18.4 8 17l5-5-5-5 1.4-1.4 6.4 6.4z" fill="currentColor"/></svg></i></button>
+      </div>
       <div class="w-list" id="w-list"></div>
     </aside>
     <button class="x w-x" type="button" data-close aria-label="Cerrar">✕</button>
