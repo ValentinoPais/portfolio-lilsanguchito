@@ -29,6 +29,7 @@
   --acc-soft: #c8bae9;   /* el violeta, apenas: el título de la barra con el mouse encima */
   --shade: rgba(5, 5, 5, .9);   /* detrás de las ventanas: casi negro y difuminado */
   --hl: rgba(236, 234, 228, .08);   /* el hover de toda la página: se ilumina el recuadro entero */
+  --hr: 10px;   /* las puntas del recuadro iluminado del hover, apenas redondeadas */
   --on-img: rgba(236, 234, 228, .74);
   --sans: "Roboto", Arial, sans-serif;   /* la de YouTube */
   --mono: var(--sans);
@@ -151,6 +152,9 @@ a.w-chl::before, a.sd-ch::before { content: ""; position: absolute; inset: calc(
 }
 .thumb { position: relative; display: block; width: 100%; overflow: hidden; background: var(--bg3); }
 .work:has(.thumb:focus-visible) { background: var(--hl); box-shadow: 0 0 0 var(--gut) var(--hl); }   /* con el teclado, igual que con el mouse */
+/* solo el recuadro del hover va redondeado: la tarjeta es transparente y sus fotos siguen rectas */
+.work, .w-it { border-radius: calc(var(--hr) - var(--gut)); }   /* con el borde de afuera (el margen chico), queda en --hr */
+.ch-l a::before, a.w-chl::before, a.sd-ch::before { border-radius: var(--hr); }
 .r169 { aspect-ratio: 16 / 9; } .r916 { aspect-ratio: 9 / 16; }
 .thumb img { width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; user-select: none; }
 .dur { position: absolute; right: var(--gut); bottom: var(--gut); font: 500 12px/1 var(--sans); color: var(--text); background: rgba(11, 11, 10, .82); padding: 3px 4px; font-variant-numeric: tabular-nums; }
@@ -351,7 +355,7 @@ dialog.watch.mini.c-tl { inset: calc(var(--barH) + 16px) auto auto 16px; }
 /* los controles de YouTube (arriba y abajo del video) quedan afuera: se maneja solo con los de encima. En pausa o
    al terminar, en vez de la pantalla de pausa de YouTube, la miniatura */
 dialog.watch.mini .stage iframe { top: -60px; bottom: auto; height: calc(100% + 120px); }
-dialog.watch.mini.ytoff .stage iframe { visibility: hidden; }
+@media (min-width: 1001px) { dialog.watch.mini.ytoff .stage iframe { visibility: hidden; } }   /* en la compu; en el celular, el cuadro pausado */
 @media (hover: none) { dialog.watch.mini .mi-b { opacity: 1; } }
 @media (max-width: 1000px) {   /* en el celular y la tablet, como en la app: una barra abajo de todo */
   dialog.watch.mini, dialog.watch.mini[class*="c-"] { --miH: 64px; inset: auto 0 0 0; width: 100%; }
@@ -466,14 +470,34 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
   .w-it-s { font-size: 14px; line-height: 20px; }
   .w-x { top: var(--gut); right: var(--gut); z-index: 5; background: rgba(11, 11, 10, .72); border-color: transparent; }
 }
-/* en el celular y la tablet, el video se agarra de arriba (encima del reproductor, YouTube se queda con los
-   toques) y se baja con el dedo para achicarlo, como en la app; la rayita lo muestra */
-.w-grab { display: none; }
-@media (max-width: 1000px) {
-  .w-grab { display: grid; place-items: start center; position: absolute; z-index: 5; top: 0; left: 0; right: 0; height: 44px; padding-top: 8px; touch-action: none; }
-  .w-grab i { width: 36px; height: 4px; border-radius: 2px; background: rgba(236, 234, 228, .7); box-shadow: 0 1px 4px rgba(0, 0, 0, .6); }
-  dialog.watch.mini .w-grab { display: none; }
-}
+/* los controles de encima del video (el horizontal en el celular y los verticales en todos lados): el video
+   se ve limpio y tocándolo aparecen el play o la pausa y cuánto va (que se toca para ir a otro momento); se van
+   solos a los 3 segundos si está sonando. En el celular, el horizontal se arrastra para abajo desde cualquier
+   parte del video para achicarlo; los verticales se pasan deslizando el dedo sobre el video */
+.w-tap, .sh-tap { position: absolute; inset: 0; z-index: 5; }
+.w-tap { display: none; touch-action: none; }
+.sh-tap { touch-action: pan-y; }
+.pc { position: absolute; inset: 0; z-index: 6; opacity: 0; pointer-events: none; transition: opacity .15s; background: linear-gradient(rgba(0, 0, 0, .3), rgba(0, 0, 0, 0) 28%, rgba(0, 0, 0, 0) 62%, rgba(0, 0, 0, .55)); }
+.sh-it.ctl .sh-v > .pc { opacity: 1; }
+.sh-it.ctl .sh-v > .pc > * { pointer-events: auto; }
+@media (max-width: 1000px) { .stage.ctl > .pc { opacity: 1; } .stage.ctl > .pc > * { pointer-events: auto; } }   /* en la compu, el horizontal usa los de YouTube */
+.pc-pp { position: absolute; left: 50%; top: 50%; translate: -50% -50%; width: 64px; height: 64px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; background: rgba(11, 11, 10, .55); color: #fff; }
+.pc-pp svg { width: 34px; height: 34px; }
+.pc-bar { position: absolute; left: 12px; right: 12px; bottom: 8px; height: 24px; display: flex; align-items: center; touch-action: none; cursor: pointer; }
+.pc-bar[hidden], .pc-fs[hidden] { display: none; }
+.pc-bar::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 3px; margin-top: -1.5px; background: rgba(255, 255, 255, .3); }
+.pc-bar i { position: relative; width: 0; height: 3px; background: var(--acc); }
+.pc-bar i::after { content: ""; position: absolute; right: -6px; top: -4.5px; width: 12px; height: 12px; border-radius: 50%; background: var(--acc); }
+.pc-fs { position: absolute; right: 6px; bottom: 30px; width: 40px; height: 40px; padding: 0; border: 0; background: none; color: #fff; display: grid; place-items: center; }
+.pc-fs svg { width: 26px; height: 26px; }
+.stage:fullscreen { width: 100%; height: 100%; aspect-ratio: auto; }
+@media (max-width: 1000px) { .stage.playing:not(.dr) .w-tap { display: block; } }
+dialog.watch.mini .w-tap, dialog.watch.mini .pc { display: none; }
+.sh-it.ctl .sh-info, .sh-it.ctl .sh-act { z-index: 6; }   /* con los controles, también el título, el canal y los números */
+.sh-v .pc-bar { left: 0; right: 0; bottom: 0; height: 18px; align-items: flex-end; }
+.sh-v .pc-bar::before { top: auto; bottom: 0; margin: 0; }
+.sh-v .pc-bar i::after { display: none; }
+.sh-v iframe.yt { top: -60px; bottom: auto; height: calc(100% + 120px); }   /* lo de YouTube de arriba y de abajo, afuera */
 /* tablet o celular acostado: el video no pasa de un poco más de la mitad de la pantalla */
 @media (max-width: 1000px) and (orientation: landscape) {
   .w-main .stage { width: min(100%, 62dvh * 16 / 9); box-shadow: 0 0 0 100vmax #000; clip-path: inset(0 -100vmax); }   /* centrado, con negro a los costados */
@@ -565,7 +589,7 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
 <dialog class="dlg watch" id="dlgWatch" aria-labelledby="w-t">
   <div class="panel" tabindex="-1" autofocus>
     <div class="w-main" id="w-main">
-      <div class="stage h" id="w-stage"><img id="w-img" alt=""><span class="dur" id="w-dur"></span><button class="play" id="w-play" type="button" aria-label="Reproducir"><span>▶</span></button><div class="mi-over" data-mini="open" aria-hidden="true"></div><div class="w-grab" aria-hidden="true"><i></i></div></div>
+      <div class="stage h" id="w-stage"><img id="w-img" alt=""><span class="dur" id="w-dur"></span><button class="play" id="w-play" type="button" aria-label="Reproducir"><span>▶</span></button><div class="mi-over" data-mini="open" aria-hidden="true"></div><div class="w-tap" aria-hidden="true"></div><div class="pc"><button class="pc-pp" id="w-pp" type="button" aria-label="Pausar"></button><div class="pc-bar" id="w-bar" hidden><i></i></div><button class="pc-fs" id="w-fs" type="button" aria-label="Pantalla completa" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" fill="currentColor"/></svg></button></div></div>
       <div class="w-body" id="w-body">
         <h2 class="w-t" id="w-t"></h2>
         <div class="w-ch" id="w-ch"></div>

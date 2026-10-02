@@ -494,10 +494,11 @@
   // El play es a mano: recién ahí se carga el reproductor de YouTube, Drive o TikTok, en el lugar de la
   // miniatura. Un video que su canal no deja insertar se abre en YouTube. Con los datos de ejemplo, un aviso.
   function embedOf(w) {
-    if (w.yt) return w.embed ? 'https://www.youtube-nocookie.com/embed/' + w.yt + '?autoplay=1&playsinline=1&rel=0&enablejsapi=1' +   // enablejsapi: para el mini reproductor
+    var bare = w.vertical || stacked();               // sin los controles de YouTube: se maneja con los de encima
+    if (w.yt) return w.embed ? 'https://www.youtube-nocookie.com/embed/' + w.yt + '?autoplay=1&playsinline=1&rel=0&enablejsapi=1' + (bare ? '&controls=0&fs=0&disablekb=1' : '') +   // enablejsapi: lo manejan los controles de encima
       (location.origin && location.origin !== 'null' ? '&origin=' + encodeURIComponent(location.origin) : '') : '';
     if (w.drive) return 'https://drive.google.com/file/d/' + w.drive + '/preview';
-    if (w.tt) return 'https://www.tiktok.com/player/v1/' + w.tt + '?autoplay=1&rel=0';
+    if (w.tt) return 'https://www.tiktok.com/player/v1/' + w.tt + '?autoplay=1&rel=0&controls=0&progress_bar=0&play_button=0&volume_control=0&fullscreen_button=0&timestamp=0&music_info=0&description=0&native_context_menu=0&closed_caption=0';
     return '';
   }
   function playHere(btn, stage, w) {
@@ -507,8 +508,8 @@
     if (src) {
       var f = document.createElement('iframe');
       f.src = src; f.title = w.title; f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.allowFullscreen = true;
-      f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-      stage.appendChild(f); stage.classList.add('playing');
+      f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin'); f.className = w.yt ? 'yt' : w.tt ? 'tt' : 'dr';
+      stage.appendChild(f); stage.classList.add('playing'); stage.classList.toggle('dr', !!w.drive);
       return;
     }
     var m = document.createElement('div');
@@ -517,14 +518,16 @@
   }
   function stopHere(stage) {                          // se va el video: deja de sonar y vuelve la miniatura
     if (!stage) return;
+    if (RP.f && stage.contains(RP.f)) pReset(RP);
     [].forEach.call(stage.querySelectorAll('iframe, .msg'), function (x) { x.remove(); });
     stage.classList.remove('playing');
     var pl = stage.querySelector('.play'); if (pl) pl.hidden = false;
-    if (stage.id === 'w-stage') YT = { f: null, ok: false, st: -1, t: 0, d: 0 };
+    if (stage.id === 'w-stage') { pReset(YT); stage.classList.remove('ctl', 'dr'); }
   }
   $('#w-play').addEventListener('click', function () {
     playHere(this, $('#w-stage'), WA.now);
-    var f = $('#w-stage iframe'); if (f && WA.now && WA.now.yt) ytHook(f);   // para el mini reproductor: cómo va, play y pausa
+    var f = $('#w-stage iframe'); if (f && WA.now && WA.now.yt) pHook(YT, f, 'yt');   // cómo va, play y pausa (mini reproductor y controles de encima)
+    paintWatch();
   });
 
   // ---------------- V1 · el video horizontal, como la página de un video en YouTube ----------------
@@ -691,7 +694,7 @@
     WB();
   }
   function closeWatch() { if (!isMini() && sounding()) reopen(true); else WD.close(); }
-  function hushMini() { if (!isMini()) return; if (YT.f && YT.ok) ytCmd('pauseVideo'); else WD.close(); }   // al abrir un vertical, el chico se calla
+  function hushMini() { if (!isMini()) return; if (YT.f && YT.ok) pCmd(YT, 'pause'); else WD.close(); }   // al abrir un vertical, el chico se calla
   function paintMini() {
     if (!isMini() || !WA.now) return;
     $('#mi-t').textContent = WA.now.title; $('#mi-c').textContent = WA.now.who || '';
@@ -704,34 +707,111 @@
   function miniAct(a) {
     if (a === 'open') return reopen(false);
     if (a === 'close') return WD.close();
-    if (a === 'play') ytCmd(YT.st === 1 || YT.st === 3 ? 'pauseVideo' : 'playVideo');
+    if (a === 'play') pCmd(YT, sounds(YT) ? 'pause' : 'play');
   }
-  function ytCmd(fn) { try { YT.f.contentWindow.postMessage(JSON.stringify({ event: 'command', func: fn, args: [] }), '*'); } catch (e) {} }
-  function ytHook(f) {                                // le pide al reproductor que avise cómo va
-    YT = { f: f, ok: false, st: -1, t: 0, d: 0 };
+  // ---------------- los reproductores de YouTube y TikTok ----------------
+  // Avisan cómo van (si suenan, en qué segundo van y cuánto duran) y aceptan órdenes (play, pausa, ir a un
+  // momento): así se manejan con los controles de encima. Hay dos: el del horizontal (YT) y el del vertical que
+  // está en pantalla (RP)
+  var RP = { f: null, kind: '', ok: false, st: -1, t: 0, d: 0 };
+  function pReset(S) { S.f = null; S.kind = ''; S.ok = false; S.st = -1; S.t = 0; S.d = 0; }
+  var sounds = function (S) { return S.ok ? S.st === 1 || S.st === 3 : !!S.f; };   // si no avisa, cuenta como que suena
+  function pHook(S, f, kind) {
+    pReset(S); S.f = f; S.kind = kind;
+    if (kind !== 'yt') return;                         // TikTok avisa solo
     var n = 0, hi = function () {
-      if (YT.f !== f || YT.ok || n++ > 25) return;
+      if (S.f !== f || S.ok || n++ > 25) return;
       try { f.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*'); } catch (e) {}
       setTimeout(hi, 400);
     };
     f.addEventListener('load', hi);
   }
+  function pCmd(S, a, v) {                            // a: play, pause o seek (v: el segundo)
+    if (!S.f) return;
+    try {
+      if (S.kind === 'yt') S.f.contentWindow.postMessage(JSON.stringify({ event: 'command', func: { play: 'playVideo', pause: 'pauseVideo', seek: 'seekTo' }[a], args: a === 'seek' ? [v, true] : [] }), '*');
+      else if (S.kind === 'tt') S.f.contentWindow.postMessage({ 'x-tiktok-player': true, type: a === 'seek' ? 'seekTo' : a, value: v }, '*');
+    } catch (e) {}
+    if (a === 'seek') S.t = v; else { S.st = a === 'play' ? 1 : 2; S.ok = S.ok || S.kind === 'tt'; }   // se ve al toque, sin esperar el aviso
+  }
   window.addEventListener('message', function (e) {
-    if (!YT.f || e.source !== YT.f.contentWindow) return;
+    var S = YT.f && e.source === YT.f.contentWindow ? YT : RP.f && e.source === RP.f.contentWindow ? RP : null;
+    if (!S) return;
     var m; try { m = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch (x) { return; }
-    if (!m || !m.event) return;
-    YT.ok = true;
-    var i = m.info;
-    if (m.event === 'onStateChange' && typeof i === 'number') YT.st = i;
-    else if (i && typeof i === 'object') {
-      if (typeof i.playerState === 'number') YT.st = i.playerState;
-      if (typeof i.currentTime === 'number') YT.t = i.currentTime;
-      if (typeof i.duration === 'number') YT.d = i.duration;
-    }
-    paintMini();
+    if (!m || typeof m !== 'object') return;
+    if (m.event) {                                     // YouTube
+      var i = m.info;
+      if (m.event === 'onStateChange' && typeof i === 'number') S.st = i;
+      else if (i && typeof i === 'object') {
+        if (typeof i.playerState === 'number') S.st = i.playerState;
+        if (typeof i.currentTime === 'number') S.t = i.currentTime;
+        if (typeof i.duration === 'number') S.d = i.duration;
+      }
+    } else if (m['x-tiktok-player']) {                 // TikTok
+      if (m.type === 'onStateChange' && typeof m.value === 'number') S.st = m.value;
+      else if (m.type === 'onCurrentTime' && m.value) { S.t = +m.value.currentTime || 0; S.d = +m.value.duration || S.d; }
+    } else return;
+    S.ok = true;
+    if (S === YT) { paintMini(); paintWatch(); } else paintReel();
   });
-  // En la compu, el chico se arrastra a cualquier lado y al soltarlo va a la esquina más cercana (queda
-  // recordada). Un toque sin arrastrar lo agranda.
+  // los controles de encima: el ícono de play o pausa y cuánto va; en pausa quedan a la vista
+  function paintPc(box, S) {
+    var b = box.querySelector('.pc-pp'), bar = box.querySelector('.pc-bar'), on = sounds(S);
+    if (b && b.dataset.on !== String(on)) { b.dataset.on = on; b.innerHTML = on ? MINI_ICON.pause : MINI_ICON.play; b.setAttribute('aria-label', on ? 'Pausar' : 'Reproducir'); }
+    if (bar) { bar.hidden = !S.d; bar.firstChild.style.width = S.d ? Math.min(100, 100 * S.t / S.d).toFixed(2) + '%' : '0'; }
+    return on;
+  }
+  var WC = 0, RC = 0;
+  function wCtl(on) {                                 // los del horizontal, en el celular
+    var st = $('#w-stage'); clearTimeout(WC); st.classList.toggle('ctl', on);
+    if (on && sounds(YT)) WC = setTimeout(function () { st.classList.remove('ctl'); }, 3000);
+  }
+  function paintWatch() { if (!paintPc($('#w-stage'), YT) && YT.ok && stacked() && !isMini()) $('#w-stage').classList.add('ctl'); }
+  function reelCtl(it, on) {                          // los del vertical que está en pantalla
+    clearTimeout(RC); it.classList.toggle('ctl', on);
+    if (on && sounds(RP)) RC = setTimeout(function () { it.classList.remove('ctl'); }, 3000);
+  }
+  function paintReel() {
+    var it = SH.items[SH.i];
+    if (it && !paintPc(it, RP) && RP.ok) it.classList.add('ctl');
+  }
+  function reelHook(it) {                             // el vertical que arrancó: a escuchar su reproductor
+    var w = byId[it.dataset.short], f = it.querySelector('.sh-v iframe');
+    if (f && w) pHook(RP, f, w.yt ? 'yt' : w.tt ? 'tt' : '');
+    paintReel();
+  }
+  // ir a otro momento: tocando o arrastrando la barrita
+  document.addEventListener('pointerdown', function (e) {
+    var bar = e.target.closest && e.target.closest('.pc-bar');
+    if (!bar) return;
+    var S = bar.closest('#w-stage') ? YT : RP;
+    if (!S.f || !S.d) return;
+    e.preventDefault(); e.stopPropagation();
+    var go = function (x) {
+      var r = bar.getBoundingClientRect();
+      pCmd(S, 'seek', Math.max(0, Math.min(1, (x - r.left) / Math.max(1, r.width))) * S.d);
+      if (S === YT) { paintWatch(); wCtl(true); } else { paintReel(); reelCtl(bar.closest('.sh-it'), true); }
+    };
+    go(e.clientX);
+    try { bar.setPointerCapture(e.pointerId); } catch (x) {}
+    var mv = function (ev) { go(ev.clientX); }, up = function () { bar.removeEventListener('pointermove', mv); bar.removeEventListener('pointerup', up); bar.removeEventListener('pointercancel', up); };
+    bar.addEventListener('pointermove', mv); bar.addEventListener('pointerup', up); bar.addEventListener('pointercancel', up);
+  }, true);
+  $('#w-pp').addEventListener('click', function () { pCmd(YT, sounds(YT) ? 'pause' : 'play'); paintWatch(); wCtl(true); });
+  // pantalla completa (donde se puede: en el iPhone, no)
+  var fsEl = function () { return document.fullscreenElement || document.webkitFullscreenElement; };
+  $('#w-fs').hidden = !(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  $('#w-fs').addEventListener('click', function () {
+    var st = $('#w-stage');
+    try {
+      if (fsEl()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      else {
+        var r = (st.requestFullscreen || st.webkitRequestFullscreen).call(st);
+        if (r && r.then && screen.orientation && screen.orientation.lock) r.then(function () { return screen.orientation.lock('landscape'); }).catch(function () {});
+      }
+    } catch (e) {}
+    wCtl(true);
+  });
   var MI = { c: 'br', drag: null, moved: false, swallow: false };
   try { MI.c = localStorage.getItem('portfolio-mini') || 'br'; } catch (e) {}
   function miCorner(c) { ['tl', 'tr', 'bl', 'br'].forEach(function (k) { WD.classList.toggle('c-' + k, k === c); }); }
@@ -767,37 +847,39 @@
   // En el celular, el video se baja con el dedo para achicarlo (como en la app de YouTube): agarrándolo de arriba
   // (encima del reproductor YouTube se queda con los toques: arriba va una franja con una rayita) o tirando
   // para abajo lo de abajo del video cuando está arriba de todo. Si se suelta antes, vuelve a su lugar.
+  // En el celular, el horizontal se arrastra para abajo desde cualquier parte del video y se achica (si suena)
+  // o se cierra, como en la app de YouTube; si se suelta antes, vuelve. Un toque muestra los controles.
   (function () {
-    var panel = $('#dlgWatch .panel'), g = null;
-    panel.addEventListener('touchstart', function (e) {
-      g = null;
-      if (!stacked() || isMini() || e.touches.length !== 1) return;
-      var t = e.target, body = $('#w-body'), grab = !!t.closest('.w-grab');
-      if (!grab && !(body.contains(t) && body.scrollTop <= 0)) return;
-      g = { x: e.touches[0].clientX, y: e.touches[0].clientY, dy: 0, on: false, grab: grab };
-    }, { passive: true });
-    panel.addEventListener('touchmove', function (e) {
-      if (!g) return;
-      var dx = e.touches[0].clientX - g.x, dy = e.touches[0].clientY - g.y;
+    var tap = $('#w-stage .w-tap'), panel = $('#dlgWatch .panel'), g = null;
+    tap.addEventListener('pointerdown', function (e) {
+      if (isMini() || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      g = { id: e.pointerId, x: e.clientX, y: e.clientY, dy: 0, on: false };
+      try { tap.setPointerCapture(e.pointerId); } catch (x) {}
+    });
+    tap.addEventListener('pointermove', function (e) {
+      if (!g || e.pointerId !== g.id) return;
+      var dx = e.clientX - g.x, dy = e.clientY - g.y;
       if (!g.on) {
-        if (!g.grab && (dy < -4 || Math.abs(dx) > Math.abs(dy))) { g = null; return; }   // para arriba o de costado: scroll de siempre
-        if (dy < 8) return;
-        g.on = true;
+        if (dy < 10 || Math.abs(dx) > dy) return;
+        g.on = true; $('#w-stage').classList.remove('ctl');
       }
-      e.preventDefault();                                // ya es el gesto: lo de abajo no se desliza
       g.dy = Math.max(0, dy);
       panel.style.transform = 'translateY(' + g.dy.toFixed(1) + 'px)';
       panel.style.opacity = (1 - Math.min(.45, g.dy / innerHeight)).toFixed(3);
-    }, { passive: false });
-    function end() {
+    });
+    function up(e) {
       var k = g; g = null;
-      if (!k || !k.on) return;
+      if (!k) return;
+      if (!k.on) { if (e.type === 'pointerup') wCtl(!$('#w-stage').classList.contains('ctl')); return; }
       var op = panel.style.opacity || 1;
       panel.style.transform = ''; panel.style.opacity = '';
-      if (k.dy > Math.min(140, innerHeight * .2)) return closeWatch();   // se achica (si suena) o se cierra
+      if (k.dy > Math.min(140, innerHeight * .2)) {
+        if (fsEl()) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (x) {} return; }   // en pantalla completa, sale de ahí
+        return closeWatch();
+      }
       if (!still()) panel.animate([{ transform: 'translateY(' + k.dy + 'px)', opacity: op }, { transform: 'none', opacity: 1 }], { duration: 220, easing: EASE });
     }
-    panel.addEventListener('touchend', end); panel.addEventListener('touchcancel', end);
+    tap.addEventListener('pointerup', up); tap.addEventListener('pointercancel', up);
   })();
   WD.addEventListener('cancel', function (e) { if (sounding()) { e.preventDefault(); setTimeout(function () { reopen(true); }); } });   // Esc
 
@@ -906,7 +988,8 @@
     return '<article class="sh-it" data-short="' + w.id + '" aria-label="' + esc(w.title) + '">' +
       '<div class="sh-v"><img src="' + esc(w.thumb) + '" alt="" draggable="false">' +
       '<button class="play" type="button" aria-label="' + esc('Reproducir “' + w.title + '”') + '"><span>▶</span></button>' +
-      '<div class="sh-info">' + who + '<p class="sh-ttl">' + esc(w.title) + '</p>' + (text ? '<div class="sh-dx">' + text + '</div>' : '') + '</div></div>' +
+      '<div class="sh-info">' + who + '<p class="sh-ttl">' + esc(w.title) + '</p>' + (text ? '<div class="sh-dx">' + text + '</div>' : '') + '</div>' +
+      (w.drive ? '' : '<div class="sh-tap" aria-hidden="true"></div><div class="pc"><button class="pc-pp" type="button" aria-label="Pausar"></button><div class="pc-bar" hidden><i></i></div></div>') + '</div>' +
       '<div class="sh-act">' + acts + '</div>' +
       '<aside class="sh-pan" aria-label="Descripción"><h3 class="sd-t">' + esc(w.title) + '</h3><button class="x sd-x" type="button" data-close aria-label="Cerrar">✕</button>' +
       (text ? '<div class="d-txt">' + text + '</div>' : '<div class="nod">Sin descripción.</div>') + (foot ? '<div class="sd-foot">' + foot + '</div>' : '') + '</aside></article>';
@@ -934,7 +1017,7 @@
     if (n === SH.i) return;
     var prev = SH.items[SH.i];
     if (prev) {                                            // el que se va deja de sonar
-      prev.classList.remove('on');
+      prev.classList.remove('on', 'ctl');
       stopHere(prev.querySelector('.sh-v'));
       var dx = prev.querySelector('.sh-dx'); if (dx) dx.scrollTop = 0;
     }
@@ -943,7 +1026,7 @@
     if (!it) return;
     it.classList.add('on');
     var pb = it.querySelector('.sh-v .play'), sw = byId[it.dataset.short];   // el que queda en pantalla arranca solo
-    if (LIVE && pb && !pb.hidden && sw && embedOf(sw)) playHere(pb, pb.closest('.sh-v'), sw);
+    if (LIVE && pb && !pb.hidden && sw && embedOf(sw)) { playHere(pb, pb.closest('.sh-v'), sw); reelHook(it); }
     var btns = SH.d.querySelectorAll('.sh-nav button');
     btns[0].disabled = n === 0; btns[1].disabled = n === SH.items.length - 1;
     SB();
@@ -1032,7 +1115,9 @@
     if ((el = t.closest('[data-watch]'))) return openWatch(el.dataset.watch, el);   // de la lista del reproductor
     if ((el = t.closest('.sh-it:not(.on)'))) return shGo(SH.items.indexOf(el));     // el de abajo (o arriba): pasa a ese
     if (t.closest('.sh-dx')) return;                                                  // leyendo la descripción: no es play
-    if ((el = t.closest('.sh-v .play'))) return playHere(el, el.closest('.sh-v'), byId[el.closest('.sh-it').dataset.short]);
+    if ((el = t.closest('.sh-it.on .pc-pp'))) { pCmd(RP, sounds(RP) ? 'pause' : 'play'); paintReel(); return reelCtl(el.closest('.sh-it'), true); }
+    if ((el = t.closest('.sh-it.on .sh-tap'))) { el = el.closest('.sh-it'); return reelCtl(el, !el.classList.contains('ctl')); }   // un toque: los controles
+    if ((el = t.closest('.sh-v .play'))) { playHere(el, el.closest('.sh-v'), byId[el.closest('.sh-it').dataset.short]); return reelHook(el.closest('.sh-it')); }
     if ((el = t.closest('[data-sh]'))) return shGo(SH.i + (+el.dataset.sh));
     if ((el = t.closest('[data-work]'))) return openWork(el.dataset.work);
     if (t.closest('[data-close]')) { el = t.closest('dialog'); return el === WD ? closeWatch() : el.close(); }
