@@ -231,8 +231,9 @@ a.yt-ch:hover, a.yt-ch:focus-visible { color: var(--text); }
 dialog.dlg { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); border: 0; background: transparent; color: var(--text); }
 dialog.dlg[open] { display: grid; place-items: center; }
 dialog.watch { overflow: hidden; }   /* arrastrando el reproductor, no aparecen barras de scroll */
-dialog.watch:has(.panel.w-drag) > .sbar { opacity: 0; }   /* ni la de la lista, que queda quieta */
-dialog.dlg::backdrop { background: var(--shade); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }   /* igual en las dos ventanas */
+dialog.watch:has(.panel.w-drag) > .sbar { opacity: 0; }
+dialog.watch:has(.panel.w-drag)::backdrop { transition: none; }   /* arrastrando, el fondo sigue al dedo; al volver, se oscurece rápido */   /* ni la de la lista, que queda quieta */
+dialog.dlg::backdrop { opacity: var(--bd, 1); transition: opacity .14s; background: var(--shade); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }   /* igual en las dos ventanas */
 dialog.watch .panel:focus, .sh-feed:focus { outline: none; }   /* al abrir, el foco va a la ventana: Tab lleva al play */
 .panel { width: min(1080px, 100% - 2 * var(--gut)); max-height: calc(100% - 2 * var(--gut)); overflow: auto; background: var(--bg2); border: 1px solid var(--line); padding: var(--gut); overscroll-behavior: contain; }
 .x { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line); font: 400 14px/1 var(--sans); }   /* cerrar: redondo */
@@ -251,6 +252,11 @@ dialog.watch .panel:focus, .sh-feed:focus { outline: none; }   /* al abrir, el f
 @keyframes pop-in { from { opacity: 0; transform: translateY(10px) scale(.99); } }
 @keyframes fade-in { from { opacity: 0; } }
 dialog.dlg[open]::backdrop { animation: fade-in .22s ease-out; }
+@media (hover: none) {   /* en el celular y la tablet, sin desenfoques ni brillos: pesan mucho y casi no se ven */
+  .ch::after { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(11, 11, 10, .96); }
+  dialog.dlg::backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .yt-av::after, .w-av::after, .sh-av::after, .ch-av::after { display: none; }
+}
 dialog.watch[open] > .panel, dialog.shorts[open] > .sh-feed { animation: pop-in .26s cubic-bezier(.2, .8, .2, 1); }
 /* video horizontal: como la página de un video en YouTube. A la izquierda el video y sus datos; a la
    derecha, el que estás viendo primero y los demás videos en una lista angosta */
@@ -372,6 +378,8 @@ dialog.watch.mini.c-tl { inset: calc(var(--barH) + 16px) auto auto 16px; }
    título, las views y los likes, y el canal. Se pasan con la rueda, el dedo, arrastrando o con las flechas */
 dialog.shorts { --shGap: 12px; --peek: calc(var(--frame) - var(--shGap)); --shV: min(100dvh - 2 * var(--peek) - 2 * var(--shGap), (100vw - 436px) * 16 / 9, (100vw - 76px) / 2 * 16 / 9); --shW: calc(var(--shV) * 9 / 16); --shP: max(360px, var(--shW)); }   /* --shP: la descripción, tan ancha como el reel y nunca menos de 360 px */   /* --shGap: el margen chico entre un reel y el siguiente */
 dialog.shorts[open] { display: block; }
+dialog.shorts { overflow: hidden; }   /* deslizando el vertical de costado, sin barras de scroll */
+dialog.shorts.sh-drag::backdrop { transition: none; }   /* el fondo sigue al dedo */
 .sh-feed { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; scroll-snap-type: y mandatory; scrollbar-width: none; padding: calc(var(--peek) + var(--shGap)) 0 calc(100dvh - var(--shV) - 2 * var(--shGap) - var(--peek)); }
 .sh-feed::-webkit-scrollbar { display: none; }
 .sh-feed.drag { scroll-snap-type: none; cursor: grabbing; user-select: none; }   /* arrastrando con el mouse, como un dedo */
@@ -488,8 +496,8 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
 .vp { position: absolute; inset: 0; color: #fff; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 .stage:not(.playing) > .vp, .stage.dr > .vp, .stage.yield > .vp, .sh-v:not(.playing) > .vp, .sh-v.yield > .vp, dialog.watch.mini .vp { display: none; }
 .vp-tap { position: absolute; inset: 0; z-index: 5; touch-action: none; }
-.vp:not(.r), .vp:not(.r) * { touch-action: none; }   /* el horizontal se arrastra desde cualquier parte, también desde sus botones */
-.vp.r .vp-tap { touch-action: pan-y; }   /* los verticales se pasan deslizando el dedo sobre el video */
+#w-stage, #w-stage * { touch-action: none; }   /* el horizontal se arrastra desde cualquier parte, también desde sus botones, en pausa o antes de arrancar */
+.vp.r .vp-tap, .sh-v, .sh-v *:not(iframe) { touch-action: pan-y; }   /* los verticales se pasan deslizando el dedo sobre el video (y de costado, se cierran) */
 .vp button { position: relative; display: grid; place-items: center; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; }
 .vp button[hidden] { display: none; }
 .vp svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, .45)); }
@@ -538,6 +546,7 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
 /* los verticales, como Shorts: en pausa, el play en el medio (sin barrita: la que se ve es la del video, si la trae) */
 .vp.r > .vp-big { width: 72px; height: 72px; margin: -36px 0 0 -36px; padding: 18px; background: rgba(0, 0, 0, .45); }
 .vp.r.v-paused > .vp-big { opacity: 1; pointer-events: auto; }
+.sh-v:has(> iframe.yt) > .vp.r > .vp-big { display: none; }   /* en los de YouTube, el play del medio es el de YouTube: el nuestro, solo en los de TikTok */
 /* en la compu, como en YouTube */
 @media (hover: hover) and (pointer: fine) {
   .vp-dim { background: linear-gradient(to top, rgba(0, 0, 0, .62), rgba(0, 0, 0, .28) 52px, rgba(0, 0, 0, 0) 124px); }
