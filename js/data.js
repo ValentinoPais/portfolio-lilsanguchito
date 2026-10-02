@@ -1,14 +1,14 @@
-/* Los datos de la web: la planilla de Google (pestañas Trabajos y Config), YouTube, Drive y TikTok.
+/* Los datos de la web: la planilla de Google (pestañas Trabajos, Tags y Config), YouTube, Drive y TikTok.
    Con la API key y el ID de la planilla en SITE_CONFIG.google (js/config.js), la web lee todo de ahí; sin
    eso, usa los datos de ejemplo (js/mock-data.js). Devuelve lo mismo que el mock, que tiene la forma de las
    respuestas de las APIs, así el resto de la web no cambia.
-   Guarda lo que trae en el navegador: la planilla por 10 minutos y lo de YouTube, Drive y TikTok por 12 horas
-   (con ?refresh=1 en la dirección vuelve a pedir todo). Si Google no responde, usa lo último guardado; si no
-   hay nada guardado, muestra lo que pueda y avisa abajo a la izquierda qué falló. */
+   La planilla se lee en cada visita, así lo que se cambia ahí se ve al toque. Lo de YouTube, Drive y TikTok se
+   guarda en el navegador por 12 horas (con ?refresh=1 en la dirección vuelve a pedir todo). Si Google no
+   responde, usa lo último guardado; si no hay nada guardado, muestra lo que pueda y avisa en la consola qué falló. */
 window.loadSiteData = (function () {
   'use strict';
   var C = window.SITE_CONFIG || {}, G = C.google || {}, MOCK = window.MOCK_DATA;
-  var MIN = 60e3, SHEET_TTL = 10 * MIN, MEDIA_TTL = 12 * 60 * MIN;
+  var MIN = 60e3, MEDIA_TTL = 12 * 60 * MIN;
   var refresh = /[?&]refresh=1(&|$)/.test(location.search);
   var API = 'https://www.googleapis.com/';
 
@@ -53,16 +53,16 @@ window.loadSiteData = (function () {
     return { kind: 'otro', id: url };
   }
 
-  // ---------------- la planilla: Trabajos y Config ----------------
+  // ---------------- la planilla: Trabajos, Tags y Config ----------------
   function range(r) {
     return get('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(G.sheetId) + '/values/' + encodeURIComponent(r) + '?' +
       qs({ valueRenderOption: 'UNFORMATTED_VALUE', key: G.apiKey })).then(function (b) { return b.values || []; });
   }
   function readSheet() {
-    var c = load('sheet');
-    if (!refresh && c && Date.now() - c.t < SHEET_TTL) return Promise.resolve(c.v);
-    return Promise.all([range('Trabajos!A2:D'), range('Config!A2:C').catch(function () { return null; })])   // sin pestaña Config: la de ejemplo
-      .then(function (r) { var v = { trabajos: r[0], config: r[1] }; save('sheet', { t: Date.now(), v: v }); return v; })
+    var c = load('sheet');                           // lo último que se leyó: solo si Google no responde
+    return Promise.all([range('Trabajos!A2:E'), range('Config!A2:C').catch(function () { return null; }),   // sin pestaña Config: la de ejemplo
+      range('Tags!A2:A').catch(function () { return null; })])                                                   // sin pestaña Tags: los tags quedan en el orden de los videos
+      .then(function (r) { var v = { trabajos: r[0], config: r[1], tags: r[2] }; save('sheet', { t: Date.now(), v: v }); return v; })
       .catch(function (e) { if (c) return c.v; throw e; });
   }
   // Config, como tabla de tres columnas: Campo, Texto y Link. Los campos: Título, Barra (un link de la barra
@@ -161,7 +161,9 @@ window.loadSiteData = (function () {
   // ---------------- todo junto ----------------
   function live() {
     return readSheet().then(function (S) {
-      var rows = (S.trabajos || []).map(function (r) { return [str(r[0]), str(r[1]), str(r[2]), hidden(r[3]) ? 'FALSE' : 'TRUE']; });
+      // Trabajos: Link, Título, Cliente, Mostrar y Tags (los del desplegable, separados por comas)
+      var rows = (S.trabajos || []).map(function (r) { return [str(r[0]), str(r[1]), str(r[2]), hidden(r[3]) ? 'FALSE' : 'TRUE', typeof r[4] === 'string' ? str(r[4]) : '']; });   // en Tags, lo que no es texto (un FALSE de una casilla) no cuenta
+      var tags = unique((S.tags || []).map(function (r) { return str(r[0]); }));   // la pestaña Tags: un tag por fila
       var shown = rows.filter(function (r) { return r[0] && r[3] !== 'FALSE'; }).map(function (r) { return parseLink(r[0]); });
       var ids = function (k) { return unique(shown.filter(function (L) { return L.kind === k; }).map(function (L) { return L.id; })); };
       var vIds = ids('yt'), dIds = ids('drive'), tUrls = ids('tiktok');
@@ -183,7 +185,7 @@ window.loadSiteData = (function () {
           dIds.forEach(function (id, i) { files[id] = r[2][i]; });
           tUrls.forEach(function (u, i) { tk[u] = r[3][i]; });
           if (dIds.some(function (id) { return files[id].error; })) warn.push('Hay archivos del Drive sin compartir');
-          return { live: true, warn: warn.join(' · '), sheet: { trabajos: rows }, config: cfg,
+          return { live: true, warn: warn.join(' · '), sheet: { trabajos: rows, tags: tags }, config: cfg,
             youtube: { videos: { items: videos }, channels: { items: chs }, self: self ? self.id : '' }, drive: { files: files }, tiktok: tk };
         });
       });
