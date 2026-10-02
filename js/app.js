@@ -9,6 +9,7 @@
   ready.then(function (M) { start(M); }, function () { start(window.MOCK_DATA); })
     .catch(function (e) { setTimeout(function () { throw e; }); });   // un error de la web, a la consola
   function start(M) {
+  var EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" fill="currentColor"/></svg>';   // las views, con un ojo en toda la página
   var LIVE = !!M.live;                               // datos reales: los videos se reproducen de verdad
   var DRIVE = 'https://drive.google.com/drive/folders/1Z_5rqiiCmAw5smuPmzadTzrB4z85pqG_';   // la carpeta, para los de ejemplo
 
@@ -138,7 +139,7 @@
     var name = !w.who ? '' : ch
       ? '<a class="yt-ch" href="' + esc(chUrl(ch)) + '" target="_blank" rel="noopener" draggable="false">' + esc(w.who) + '</a>'
       : '<span class="yt-ch">' + esc(w.who) + '</span>';
-    var views = w.views != null ? '<span class="yt-v"><i aria-hidden="true">▶</i> ' + abbr(w.views) + '<span class="sr"> views</span></span>' : '';
+    var views = w.views != null ? '<span class="yt-v">' + EYE + ' ' + abbr(w.views) + '<span class="sr"> views</span></span>' : '';
     return '<div class="work' + (w.vertical ? ' v' : '') + '" data-work="' + w.id + '">' +
       '<button class="thumb ' + (w.vertical ? 'r916' : 'r169') + '" type="button" aria-label="' + esc('Ver “' + w.title + '”') + '">' +
       (w.thumb ? '<img src="' + esc(w.thumb) + '" alt="" loading="lazy" decoding="async" draggable="false">' : '') +
@@ -184,7 +185,7 @@
       return looped ? ((i % k) + k) % k : i;
     }
     // el scroll solo acepta píxeles enteros: el resto va como un corrimiento de las tarjetas
-    function sub(x) { track.style.setProperty('--sub', (x || 0).toFixed(2) + 'px'); }
+    function sub(x) { track.style.translate = x ? x.toFixed(2) + 'px 0' : ''; }   // se corre la fila entera: un solo elemento por cuadro
     function halt() {                                  // la agarró la mano: queda donde está
       if (running) { track.scrollLeft = Math.round(pos); sub(0); }
       running = false;
@@ -227,7 +228,7 @@
     var belt = function (now) {                        // cada cuadro: avanza, y el envión se apaga suave
       var dt = last ? Math.min(50, now - last) : 16;
       last = now;
-      if (!looped || reduce || document.hidden || window.__snap || focused || (drag && drag.on) || wh.on) return halt();
+      if (!looped || reduce || document.hidden || window.__snap || focused || (drag && drag.on) || wh.on || (!track.closest('dialog') && document.querySelector('dialog.dlg[open]:not(.mini)'))) return halt();   // con una ventana abierta, las de la página quietas
       if (!inView) { halt(); v = dir * SPEED; return; }   // fuera de la pantalla espera, ya a su velocidad
       if (!running) { running = true; pos = track.scrollLeft; }
       v = dir * SPEED + (v - dir * SPEED) * Math.exp(-dt / GLIDE);
@@ -274,7 +275,7 @@
         if (ay > ax) { drag = null; return; }          // para arriba o para abajo: es la página
         halt();
         drag.on = true; moved = true; drag.left = track.scrollLeft; drag.x = e.clientX; dx = 0;
-        track.classList.add('dragging');
+        track.classList.add('dragging'); noSel();
         try { track.setPointerCapture(e.pointerId); } catch (err) {}
       }
       x = drag.left - dx;
@@ -389,6 +390,7 @@
       set(b.dataset.topic);
       // el elegido, entero a la vista (solo de costado: la página no se mueve)
       var r = row.getBoundingClientRect(), cr = b.getBoundingClientRect();
+      if (row.querySelector('.clone')) { pick(cur); return; }   // la que avanza sola no se corre
       if (cr.left < r.left + 40) row.scrollBy({ left: cr.left - r.left - 40, behavior: reduce ? 'auto' : 'smooth' });
       else if (cr.right > r.right - 40) row.scrollBy({ left: cr.right - r.right + 40, behavior: reduce ? 'auto' : 'smooth' });
       pick(cur);
@@ -402,6 +404,7 @@
       topic = t; layout();
       feed.classList.remove('swap'); void feed.offsetWidth; feed.classList.add('swap');
     });
+    carousel($('#chip-r'), 0);                         // si no entran todos, avanzan solos y sin fin, como los reels
   })();
 
   // ---------------- hover como la biblioteca de Steam: las fotos de los canales ----------------
@@ -471,6 +474,13 @@
     });
   }
 
+  // arrastrando con el mouse para deslizar (la página, las ventanas, las filas, los verticales o el mini), no se
+  // selecciona texto: lo que se llegó a marcar antes de que arranque el arrastre se borra, y mientras dura, no se marca nada
+  var dragging = function () { return document.documentElement.classList.contains('grabbing') || !!document.querySelector('.track.dragging, .sh-feed.drag, .w-list.dragging'); };
+  function noSel() { try { var s = window.getSelection(); if (s && s.rangeCount && !s.isCollapsed) s.removeAllRanges(); } catch (e) {} }
+  document.addEventListener('selectstart', function (e) { if (dragging()) e.preventDefault(); });
+  document.addEventListener('pointermove', function (e) { if (e.pointerType === 'mouse' && e.buttons && dragging()) noSel(); }, true);
+
   // ---------------- ventanas ----------------
   function show(d) { if (d.open) return; try { d.showModal(); } catch (e) { d.setAttribute('open', ''); } }
   var EASE = 'cubic-bezier(.2, .8, .2, 1)';
@@ -486,6 +496,45 @@
     return ch ? '<a class="w-chl" href="' + esc(chUrl(ch)) + '" target="_blank" rel="noopener">' + who + '</a>' : '<span class="w-chl">' + who + '</span>';
   };
 
+  // ---------------- el corazón ----------------
+  // Tocándolo, como en los vivos de Instagram: cada toque saca un corazón que sube con su propio ángulo y se va
+  // apagando, con un ruidito; tocando seguido salen varios. Es solo el efecto: los likes son los de YouTube.
+  var HEART = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.6s-7.4-4.5-9.3-9C1.4 8.3 3.5 4.8 7 4.8c2 0 3.4 1.1 4.1 2.4h1.8c.7-1.3 2.1-2.4 4.1-2.4 3.5 0 5.6 3.5 4.3 6.8-1.9 4.5-9.3 9-9.3 9z" fill="currentColor"/></svg>';
+  var AC = null;
+  function blip() {                                   // un “pop” corto, hecho en el momento (sin archivo de sonido)
+    try {
+      AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+      if (AC.state === 'suspended') AC.resume();
+      var t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain(), f = 540 + Math.random() * 160;
+      o.type = 'sine'; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 2.1, t + .08);
+      g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.16, t + .012); g.gain.exponentialRampToValueAtTime(.0001, t + .15);
+      o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + .17);
+    } catch (e) {}
+  }
+  function burst(btn) {
+    blip();
+    if (still()) return;
+    btn.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.22)' }, { transform: 'scale(1)' }], { duration: 260, easing: EASE });
+    var host = btn.closest('dialog') || document.body, r = (btn.querySelector('svg') || btn).getBoundingClientRect();
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2, cols = ['#9272F0', '#B7A4F8', '#7B5CE8', '#D3C5FB', '#ECEAE4'];
+    (function () {                                     // uno por toque
+      var h = document.createElement('span'), sz = 16 + Math.random() * 14;
+      h.className = 'heart-fly'; h.innerHTML = HEART;
+      h.style.cssText = 'left:' + (cx - sz / 2) + 'px;top:' + (cy - sz / 2) + 'px;width:' + sz + 'px;height:' + sz + 'px;color:' + cols[Math.floor(Math.random() * cols.length)];
+      host.appendChild(h);
+      var a = (-90 + Math.random() * 76 - 38) * Math.PI / 180, d = 110 + Math.random() * 130;   // para arriba, cada uno con su ángulo
+      var dx = Math.cos(a) * d, dy = Math.sin(a) * d, sw = Math.random() * 36 - 18, rot = Math.random() * 56 - 28;
+      var at = function (k, x) { return 'translate(' + (dx * k + x).toFixed(1) + 'px,' + (dy * k).toFixed(1) + 'px)'; };
+      h.animate([
+        { transform: at(0, 0) + ' scale(.4) rotate(0deg)', opacity: 0, filter: 'blur(0px)' },
+        { transform: at(.22, sw) + ' scale(1.08) rotate(' + (rot / 2).toFixed(1) + 'deg)', opacity: 1, filter: 'blur(0px)', offset: .2 },
+        { transform: at(.62, -sw) + ' scale(1) rotate(' + rot.toFixed(1) + 'deg)', opacity: .8, filter: 'blur(.5px)', offset: .6 },
+        { transform: at(1, sw / 2) + ' scale(.85) rotate(' + (rot * 1.4).toFixed(1) + 'deg)', opacity: 0, filter: 'blur(2px)' }
+      ], { duration: 1000 + Math.random() * 600, easing: 'cubic-bezier(.25, .6, .35, 1)', fill: 'both' })
+        .finished.then(function () { h.remove(); }, function () { h.remove(); });
+    })();
+  }
+
   function openWork(id) {
     var w = byId[id];
     if (!w) return;
@@ -493,25 +542,28 @@
   }
   // El play es a mano: recién ahí se carga el reproductor de YouTube, Drive o TikTok, en el lugar de la
   // miniatura. Un video que su canal no deja insertar se abre en YouTube. Con los datos de ejemplo, un aviso.
-  function embedOf(w) {
+  function embedOf(w, pre, at) {                     // at: el segundo donde arranca (al recargarlo)                         // pre: se carga sin arrancar (el vertical de abajo o de arriba)
     var bare = w.vertical || stacked();               // sin los controles de YouTube: se maneja con los de encima
-    if (w.yt) return w.embed ? 'https://www.youtube-nocookie.com/embed/' + w.yt + '?autoplay=1&playsinline=1&rel=0&enablejsapi=1' + (bare ? '&controls=0&fs=0&disablekb=1' : '') +   // enablejsapi: lo manejan los controles de encima
-      (location.origin && location.origin !== 'null' ? '&origin=' + encodeURIComponent(location.origin) : '') : '';
+    if (w.yt) return w.embed ? 'https://www.youtube-nocookie.com/embed/' + w.yt + '?autoplay=' + (pre ? 0 : 1) + '&playsinline=1&rel=0&enablejsapi=1' + (bare ? '&controls=0&fs=0&disablekb=1' : '') +   // enablejsapi: lo manejan los controles de encima
+      (at ? '&start=' + at : '') + (location.origin && location.origin !== 'null' ? '&origin=' + encodeURIComponent(location.origin) : '') : '';
     if (w.drive) return 'https://drive.google.com/file/d/' + w.drive + '/preview';
-    if (w.tt) return 'https://www.tiktok.com/player/v1/' + w.tt + '?autoplay=1&rel=0&controls=0&progress_bar=0&play_button=0&volume_control=0&fullscreen_button=0&timestamp=0&music_info=0&description=0&native_context_menu=0&closed_caption=0';
+    if (w.tt) return 'https://www.tiktok.com/player/v1/' + w.tt + '?autoplay=' + (pre ? 0 : 1) + '&rel=0&loop=1&controls=0&progress_bar=0&play_button=0&volume_control=0&fullscreen_button=0&timestamp=0&music_info=0&description=0&native_context_menu=0&closed_caption=0';
     return '';
   }
-  function playHere(btn, stage, w) {
-    var src = LIVE && w ? embedOf(w) : '';
-    if (LIVE && w && !src) { window.open(w.out, '_blank', 'noopener'); return; }
-    btn.hidden = true;
+  function playHere(btn, stage, w, pre, at) {
+    var src = LIVE && w ? embedOf(w, pre, at) : '';
+    if (LIVE && w && !src) { if (!pre) window.open(w.out, '_blank', 'noopener'); return; }
+    if (!pre && btn) btn.hidden = true;
     if (src) {
       var f = document.createElement('iframe');
-      f.src = src; f.title = w.title; f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.allowFullscreen = true;
-      f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin'); f.className = w.yt ? 'yt' : w.tt ? 'tt' : 'dr';
-      stage.appendChild(f); stage.classList.add('playing'); stage.classList.toggle('dr', !!w.drive);
+      f.src = src; f.setAttribute('aria-label', w.title);   // sin title: nada de cartelitos del navegador
+      f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.allowFullscreen = true;
+      f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin'); f.className = (w.yt ? 'yt' : w.tt ? 'tt' : 'dr') + (pre ? ' pre' : '');
+      f.addEventListener('load', function () { f.dataset.ok = '1'; });
+      stage.appendChild(f); if (!pre) stage.classList.add('playing'); stage.classList.toggle('dr', !!w.drive);
       return;
     }
+    if (pre) return;
     var m = document.createElement('div');
     m.className = 'msg'; m.textContent = 'Prototipo: en la web real el video se reproduce acá';
     stage.appendChild(m);
@@ -522,7 +574,7 @@
     [].forEach.call(stage.querySelectorAll('iframe, .msg'), function (x) { x.remove(); });
     stage.classList.remove('playing');
     var pl = stage.querySelector('.play'); if (pl) pl.hidden = false;
-    if (stage.id === 'w-stage') { pReset(YT); stage.classList.remove('ctl', 'dr'); }
+    if (stage.id === 'w-stage') { pReset(YT); stage.classList.remove('ctl', 'dr', 'yield'); }
   }
   $('#w-play').addEventListener('click', function () {
     playHere(this, $('#w-stage'), WA.now);
@@ -571,13 +623,21 @@
     if (stacked()) { if (side.parentNode !== body) body.appendChild(side); }
     else if (side.parentNode === body) $('#dlgWatch .panel').insertBefore(side, $('#dlgWatch .w-x'));
   }
-  if (STACK.addEventListener) STACK.addEventListener('change', placeSide); else STACK.addListener(placeSide);
+  function relayWatch() {
+    var f = $('#w-stage iframe');
+    if (!f || !f.classList.contains('yt') || !WA.now || !$('#dlgWatch').open || $('#dlgWatch').classList.contains('mini')) return;
+    var at = Math.floor(YT.t || 0);
+    stopHere($('#w-stage')); playHere($('#w-play'), $('#w-stage'), WA.now, false, at);
+    var nf = $('#w-stage iframe'); if (nf) pHook(YT, nf, 'yt'); paintWatch();
+  }
+  var onStack = function () { placeSide(); relayWatch(); };
+  if (STACK.addEventListener) STACK.addEventListener('change', onStack); else STACK.addListener(onStack);
   placeSide();
   function sideItem(v) {
     return '<button class="w-it" type="button" data-watch="' + v.id + '" aria-label="' + esc('Ver “' + v.title + '”') + '">' +
       '<span class="w-th r169"><img src="' + esc(v.thumb) + '" alt="" loading="lazy" draggable="false">' + (v.dur ? '<span class="dur">' + v.dur + '</span>' : '') + '</span>' +
       '<span class="w-it-t"><span class="w-it-ttl">' + esc(v.title) + '</span>' + (v.who ? '<span class="w-it-s">' + esc(v.who) + '</span>' : '') +
-      (v.views != null ? '<span class="w-it-s w-it-v"><i aria-hidden="true">▶</i> ' + abbr(v.views) + '<span class="sr"> views</span></span>' : '') + '</span></button>';
+      (v.views != null ? '<span class="w-it-s w-it-v">' + EYE + ' ' + abbr(v.views) + '<span class="sr"> views</span></span>' : '') + '</span></button>';
   }
   // los demás horizontales, sin el que estás viendo, con variedad (del tema elegido arriba de la lista)
   function listFor(w) {
@@ -600,7 +660,8 @@
     tt.innerHTML = '<a class="w-tl" href="' + esc(w.out) + '" target="_blank" rel="noopener">' + esc(w.title) + '</a>';
     tt.setAttribute('data-tip', w.outLabel);
     var stat = w.views != null ? '<b class="w-views">' + full.format(w.views) + ' visualizaciones</b>' : '';
-    $('#w-ch').innerHTML = channelBlock(w) + (stat ? '<div class="w-stat">' + stat + '</div>' : '');
+    var like = w.likes != null ? '<button class="w-like" type="button" data-like aria-label="' + esc(full.format(w.likes) + ' Me gusta') + '">' + HEART + '<span>' + abbr(w.likes) + '</span></button>' : '';
+    $('#w-ch').innerHTML = channelBlock(w) + like + (stat ? '<div class="w-stat">' + stat + '</div>' : '');
     var box = $('#w-desc');
     box.innerHTML = w.desc ? '<div class="d-txt">' + linkify(w.desc) + '<button class="d-more" type="button" hidden>…más</button></div>'
       : '<span class="nod">Sin descripción.</span>';
@@ -610,10 +671,12 @@
   var wChips = (function () {
     var list = topicsFor(hs);
     if (!list.length) return null;
-    return chipRow($('#w-chips'), $('#w-chip-r'), list, function (t) {
+    var r = chipRow($('#w-chips'), $('#w-chip-r'), list, function (t) {
       WA.topic = t;
       fillList(listFor(WA.now)); $('#w-list').scrollTop = 0;
     });
+    carousel($('#w-chip-r'), 0);                       // si no entran todos, avanzan solos y sin fin, como los reels de la página
+    return r;
   })();
   // el cartel del título sigue al mouse, sin salirse del título
   $('#w-t').addEventListener('mousemove', function (e) {
@@ -685,7 +748,7 @@
   var MINI_ICON = { play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
     pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="currentColor"/></svg>' };
   var isMini = function () { return WD.open && WD.classList.contains('mini'); };
-  var sounding = function () { return !!$('#w-stage iframe') && YT.st !== 0 && YT.st !== 2; };   // sin saberlo (Drive), cuenta como que suena
+  var sounding = function () { return !!$('#w-stage iframe') && (YT.on ? YT.st !== 0 && YT.st !== 2 : !YT.ok); };   // sin saberlo (Drive, o YouTube que todavía no avisó), cuenta como que suena
   function setMini(on) { WD.classList.toggle('mini', on); if (!on) WD.classList.remove('ytoff'); document.documentElement.classList.toggle('has-mini', on); }
   function reopen(mini) {                             // la misma ventana, grande o chica: el video sigue sonando
     WA.keep++; WD.close(); setMini(mini);
@@ -700,12 +763,14 @@
     $('#mi-t').textContent = WA.now.title; $('#mi-c').textContent = WA.now.who || '';
     var on = YT.st === 1 || YT.st === 3, b = $('#mi-play');
     b.hidden = $('#mi-bar').hidden = !YT.f || !YT.ok;
+    if (stacked() && ytPaused(YT)) b.hidden = true;   // en el celular, en pausa queda solo el play de YouTube, en el video
     WD.classList.toggle('ytoff', !!YT.f && YT.ok && (YT.st === 2 || YT.st === 0));
     if (miOn !== on) { miOn = on; b.innerHTML = on ? MINI_ICON.pause : MINI_ICON.play; b.setAttribute('aria-label', on ? 'Pausar' : 'Reproducir'); }
     $('#mi-fill').style.width = YT.d ? Math.min(100, 100 * YT.t / YT.d).toFixed(2) + '%' : '0';
   }
   function miniAct(a) {
-    if (a === 'open') return reopen(false);
+    if (a === 'video' && stacked() && ytPaused(YT)) { pCmd(YT, 'play'); return paintMini(); }   // en pausa, tocando el video sigue
+    if (a === 'open' || a === 'video') return reopen(false);
     if (a === 'close') return WD.close();
     if (a === 'play') pCmd(YT, sounds(YT) ? 'pause' : 'play');
   }
@@ -713,9 +778,10 @@
   // Avisan cómo van (si suenan, en qué segundo van y cuánto duran) y aceptan órdenes (play, pausa, ir a un
   // momento): así se manejan con los controles de encima. Hay dos: el del horizontal (YT) y el del vertical que
   // está en pantalla (RP)
-  var RP = { f: null, kind: '', ok: false, st: -1, t: 0, d: 0 };
-  function pReset(S) { S.f = null; S.kind = ''; S.ok = false; S.st = -1; S.t = 0; S.d = 0; }
+  var RP = { f: null, kind: '', ok: false, on: false, st: -1, t: 0, d: 0 };
+  function pReset(S) { S.f = null; S.kind = ''; S.ok = false; S.on = false; S.st = -1; S.t = 0; S.d = 0; }
   var sounds = function (S) { return S.ok ? S.st === 1 || S.st === 3 : !!S.f; };   // si no avisa, cuenta como que suena
+  var ytPaused = function (S) { return S.kind === 'yt' && S.on && !sounds(S); };   // en pausa YouTube muestra su play en el medio: el nuestro, no
   function pHook(S, f, kind) {
     pReset(S); S.f = f; S.kind = kind;
     if (kind !== 'yt') return;                         // TikTok avisa solo
@@ -724,14 +790,21 @@
       try { f.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*'); } catch (e) {}
       setTimeout(hi, 400);
     };
-    f.addEventListener('load', hi);
+    if (f.dataset.ok) hi(); else f.addEventListener('load', hi);   // el precargado ya está listo
+  }
+  function post(f, kind, a, v) {                     // una orden a un reproductor
+    try {
+      if (kind === 'yt') f.contentWindow.postMessage(JSON.stringify({ event: 'command', func: { play: 'playVideo', pause: 'pauseVideo', seek: 'seekTo' }[a], args: a === 'seek' ? [v, true] : [] }), '*');
+      else if (kind === 'tt') f.contentWindow.postMessage({ 'x-tiktok-player': true, type: a === 'seek' ? 'seekTo' : a, value: v }, '*');
+    } catch (e) {}
+  }
+  function pStart(S) {                                // que arranque ya: insiste hasta que el reproductor avisa que suena
+    var f = S.f, n = 0; S.st = -1;
+    (function go() { if (S.f !== f || n++ > 12 || S.st === 1 || S.st === 3) return; post(f, S.kind, 'play'); setTimeout(go, 300); })();
   }
   function pCmd(S, a, v) {                            // a: play, pause o seek (v: el segundo)
     if (!S.f) return;
-    try {
-      if (S.kind === 'yt') S.f.contentWindow.postMessage(JSON.stringify({ event: 'command', func: { play: 'playVideo', pause: 'pauseVideo', seek: 'seekTo' }[a], args: a === 'seek' ? [v, true] : [] }), '*');
-      else if (S.kind === 'tt') S.f.contentWindow.postMessage({ 'x-tiktok-player': true, type: a === 'seek' ? 'seekTo' : a, value: v }, '*');
-    } catch (e) {}
+    post(S.f, S.kind, a, v);
     if (a === 'seek') S.t = v; else { S.st = a === 'play' ? 1 : 2; S.ok = S.ok || S.kind === 'tt'; }   // se ve al toque, sin esperar el aviso
   }
   window.addEventListener('message', function (e) {
@@ -751,7 +824,8 @@
       if (m.type === 'onStateChange' && typeof m.value === 'number') S.st = m.value;
       else if (m.type === 'onCurrentTime' && m.value) { S.t = +m.value.currentTime || 0; S.d = +m.value.duration || S.d; }
     } else return;
-    S.ok = true;
+    S.ok = true; if (S.st === 1 || S.st === 3) S.on = true;   // ya arrancó: desde ahora se maneja con los de encima
+    if (S === RP && S.st === 0) { post(S.f, S.kind, 'seek', 0); post(S.f, S.kind, 'play'); S.st = 1; }   // el vertical terminó: vuelve a empezar, sin pantalla final
     if (S === YT) { paintMini(); paintWatch(); } else paintReel();
   });
   // los controles de encima: el ícono de play o pausa y cuánto va; en pausa quedan a la vista
@@ -766,14 +840,46 @@
     var st = $('#w-stage'); clearTimeout(WC); st.classList.toggle('ctl', on);
     if (on && sounds(YT)) WC = setTimeout(function () { st.classList.remove('ctl'); }, 3000);
   }
-  function paintWatch() { if (!paintPc($('#w-stage'), YT) && YT.ok && stacked() && !isMini()) $('#w-stage').classList.add('ctl'); }
-  function reelCtl(it, on) {                          // los del vertical que está en pantalla
-    clearTimeout(RC); it.classList.toggle('ctl', on);
-    if (on && sounds(RP)) RC = setTimeout(function () { it.classList.remove('ctl'); }, 3000);
+  var clock = function (x) { x = Math.max(0, Math.floor(x || 0)); var h = Math.floor(x / 3600), m = Math.floor(x % 3600 / 60), k = x % 60; return (h ? h + ':' + (m < 10 ? '0' : '') : '') + m + ':' + (k < 10 ? '0' : '') + k; };
+  function paintWatch() {
+    var st = $('#w-stage'); st.classList.toggle('live', YT.on); if (YT.on) st.classList.remove('yield');
+    st.classList.toggle('paused', YT.on && !sounds(YT));
+    $('#w-time').textContent = YT.d ? clock(YT.t) + ' / ' + clock(YT.d) : '';
+    if (!paintPc(st, YT) && YT.on && stacked() && !isMini()) st.classList.add('ctl');
   }
   function paintReel() {
-    var it = SH.items[SH.i];
-    if (it && !paintPc(it, RP) && RP.ok) it.classList.add('ctl');
+    var it = SH.items[SH.i], v = it && it.querySelector('.sh-v');
+    if (!it) return;
+    v.classList.toggle('live', RP.on || (RP.kind === 'tt' && !!RP.f));   // TikTok quizás no avisa: va igual
+    paintPc(it, RP);                                     // la pausa o el play del medio y la barrita
+    v.classList.toggle('paused', RP.on && !sounds(RP));  // en pausa, la miniatura en vez de la pantalla de pausa de YouTube
+  }
+  // Los verticales se precargan: el de abajo y el de arriba ya tienen el reproductor cargado (escondido y sin
+  // sonar), así al pasar arrancan al instante. El que se va queda en pausa por si volvés; los más lejos se descargan.
+  var reelFrame = function (it) { return it && it.querySelector('.sh-v iframe'); };
+  var kindOf = function (f) { return f.classList.contains('yt') ? 'yt' : f.classList.contains('tt') ? 'tt' : ''; };
+  function reelPre(it) {
+    var w = it && byId[it.dataset.short], v = it && it.querySelector('.sh-v');
+    if (w && v && LIVE && !reelFrame(it) && embedOf(w, true)) playHere(v.querySelector('.play'), v, w, true);
+  }
+  function reelStop(it) {                             // el que se va: en pausa, escondido y con su miniatura
+    var f = reelFrame(it), v = it && it.querySelector('.sh-v');
+    if (!f) return;
+    post(f, kindOf(f), 'pause');
+    if (RP.f === f) pReset(RP);
+    f.classList.add('pre'); v.classList.remove('playing', 'live');
+    var pb = v.querySelector('.play'); if (pb) pb.hidden = false;
+  }
+  function reelGo(it) {                               // el que queda en pantalla: suena (el precargado, al instante)
+    var w = byId[it.dataset.short], v = it.querySelector('.sh-v'), pb = v.querySelector('.play'), f = reelFrame(it);
+    if (!f) { if (LIVE && pb && w && embedOf(w)) { playHere(pb, v, w); reelHook(it); } return; }
+    f.classList.remove('pre'); v.classList.add('playing'); if (pb) pb.hidden = true;
+    reelHook(it); pStart(RP);
+  }
+  function closeDesc(it) {                            // la descripción del vertical, cerrada otra vez
+    var inf = it.querySelector('.sh-info.open'), mb = it.querySelector('.sh-more');
+    if (inf) inf.classList.remove('open');
+    if (mb) { mb.textContent = '…más'; mb.setAttribute('aria-expanded', 'false'); }
   }
   function reelHook(it) {                             // el vertical que arrancó: a escuchar su reproductor
     var w = byId[it.dataset.short], f = it.querySelector('.sh-v iframe');
@@ -790,7 +896,7 @@
     var go = function (x) {
       var r = bar.getBoundingClientRect();
       pCmd(S, 'seek', Math.max(0, Math.min(1, (x - r.left) / Math.max(1, r.width))) * S.d);
-      if (S === YT) { paintWatch(); wCtl(true); } else { paintReel(); reelCtl(bar.closest('.sh-it'), true); }
+      if (S === YT) { paintWatch(); wCtl(true); } else paintReel();
     };
     go(e.clientX);
     try { bar.setPointerCapture(e.pointerId); } catch (x) {}
@@ -826,7 +932,7 @@
     var dx = e.clientX - g.x, dy = e.clientY - g.y;
     if (!MI.moved) {
       if (Math.abs(dx) + Math.abs(dy) < 6) return;
-      MI.moved = true; document.documentElement.classList.add('grabbing');
+      MI.moved = true; document.documentElement.classList.add('grabbing'); noSel();
       WD.getAnimations().forEach(function (a) { a.cancel(); });
     }
     dx = Math.max(-g.r.left, Math.min(innerWidth - g.r.right, dx)); dy = Math.max(-g.r.top, Math.min(innerHeight - g.r.bottom, dy));
@@ -856,28 +962,56 @@
       g = { id: e.pointerId, x: e.clientX, y: e.clientY, dy: 0, on: false };
       try { tap.setPointerCapture(e.pointerId); } catch (x) {}
     });
+    // Suave mientras suena: el dedo solo mueve la ventana (nada de transparencias encima del video), una vez por
+    // cuadro; al soltar, la ventana sigue hasta el lugar del mini reproductor achicándose (o se va para abajo) y
+    // recién ahí cambia, con el video ya chico donde va a quedar
     tap.addEventListener('pointermove', function (e) {
       if (!g || e.pointerId !== g.id) return;
       var dx = e.clientX - g.x, dy = e.clientY - g.y;
       if (!g.on) {
         if (dy < 10 || Math.abs(dx) > dy) return;
-        g.on = true; $('#w-stage').classList.remove('ctl');
+        g.on = true; $('#w-stage').classList.remove('ctl'); panel.style.willChange = 'transform';
+        panel.getAnimations().forEach(function (x) { x.cancel(); });
       }
       g.dy = Math.max(0, dy);
-      panel.style.transform = 'translateY(' + g.dy.toFixed(1) + 'px)';
-      panel.style.opacity = (1 - Math.min(.45, g.dy / innerHeight)).toFixed(3);
+      var k = g;
+      if (!k.raf) k.raf = requestAnimationFrame(function () { k.raf = 0; if (g === k) panel.style.transform = 'translateY(' + k.dy.toFixed(1) + 'px)'; });
     });
+    var envPx = function (v) { var d = document.createElement('div'); d.style.cssText = 'position:fixed;visibility:hidden;height:env(' + v + ', 0px)'; document.body.appendChild(d); var h = d.offsetHeight; d.remove(); return h; };
+    function clear() { panel.style.transform = ''; panel.style.transformOrigin = ''; panel.style.willChange = ''; }
+    function drop(dy) {
+      var mini = sounding();
+      if (still()) { clear(); return closeWatch(); }
+      panel.style.transform = 'translateY(' + dy + 'px)';
+      var p = panel.getBoundingClientRect(), st = $('#w-stage').getBoundingClientRect(), ox = st.left - p.left, oy = st.top - p.top, to;
+      if (mini) {                                       // el video va justo al lugar del video del mini
+        var H = 64, ty = innerHeight - envPx('safe-area-inset-bottom') - H;
+        to = 'translate(' + (-(p.left + ox)).toFixed(1) + 'px,' + (ty - (p.top - dy + oy)).toFixed(1) + 'px) scale(' + (H * 16 / 9 / st.width).toFixed(4) + ')';
+      } else to = 'translateY(' + (innerHeight - p.top + dy).toFixed(1) + 'px)';
+      panel.style.transformOrigin = ox.toFixed(1) + 'px ' + oy.toFixed(1) + 'px';
+      var an = panel.animate([{ transform: 'translateY(' + dy + 'px)' }, { transform: to }], { duration: mini ? 300 : 220, easing: 'cubic-bezier(.2, .8, .2, 1)', fill: 'forwards' });
+      var fin = function () { an.cancel(); clear(); closeWatch(); };
+      an.finished.then(fin, function () {});
+    }
     function up(e) {
       var k = g; g = null;
       if (!k) return;
-      if (!k.on) { if (e.type === 'pointerup') wCtl(!$('#w-stage').classList.contains('ctl')); return; }
-      var op = panel.style.opacity || 1;
-      panel.style.transform = ''; panel.style.opacity = '';
-      if (k.dy > Math.min(140, innerHeight * .2)) {
-        if (fsEl()) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (x) {} return; }   // en pantalla completa, sale de ahí
-        return closeWatch();
+      if (k.raf) cancelAnimationFrame(k.raf);
+      if (!k.on) {
+        if (e.type !== 'pointerup') return;
+        if (!YT.on) {                                     // todavía no arrancó: que arranque; si no lo dejan (pasa en el iPhone),
+          pCmd(YT, 'play');                               // la capa se corre para que se toque el play de YouTube
+          return setTimeout(function () { if (YT.f && !YT.on) $('#w-stage').classList.add('yield'); }, 700);
+        }
+        if (ytPaused(YT)) { pCmd(YT, 'play'); paintWatch(); return wCtl(true); }   // en pausa, el toque lo hace seguir
+        return wCtl(!$('#w-stage').classList.contains('ctl'));
       }
-      if (!still()) panel.animate([{ transform: 'translateY(' + k.dy + 'px)', opacity: op }, { transform: 'none', opacity: 1 }], { duration: 220, easing: EASE });
+      if (k.dy > Math.min(140, innerHeight * .2)) {
+        if (fsEl()) { clear(); try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (x) {} return; }   // en pantalla completa, sale de ahí
+        return drop(k.dy);
+      }
+      clear();
+      if (!still()) panel.animate([{ transform: 'translateY(' + k.dy + 'px)' }, { transform: 'none' }], { duration: 220, easing: EASE });
     }
     tap.addEventListener('pointerup', up); tap.addEventListener('pointercancel', up);
   })();
@@ -930,7 +1064,7 @@
         if (ax >= ay) { d = null; return; }            // de costado: no es scroll
         d.on = true; moved = true; d.y = e.clientY; d.top = get(d.el); d.ly = e.clientY; d.lt = now;
         if (d.el === page) page.style.scrollBehavior = 'auto';   // mientras se arrastra, sin scroll suave
-        html.classList.add('grabbing');
+        html.classList.add('grabbing'); noSel();
         var sel = getSelection && getSelection(); if (sel && sel.rangeCount) sel.removeAllRanges();
         try { d.el.setPointerCapture(e.pointerId); } catch (x) {}
         return;
@@ -971,7 +1105,7 @@
   var SB = ownBar(SH.d, function () { var it = SH.items[SH.i]; return it && it.querySelector('.sh-pan .d-txt'); });   // la barra propia: la descripción
   var ICON = {
     like: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19.6s-7.3-4.4-7.3-9.9A4.1 4.1 0 0 1 12 7.2a4.1 4.1 0 0 1 7.3 2.5c0 5.5-7.3 9.9-7.3 9.9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
-    views: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.8v12.4L18.4 12z" fill="currentColor"/></svg>'
+    views: EYE
   };
   function shortItem(w) {
     var ch = w.channelId ? channels[w.channelId] : null;
@@ -979,16 +1113,17 @@
       : w.who ? '<span class="sh-av ini" aria-hidden="true">' + esc(w.who.charAt(0).toUpperCase()) + '</span>' : '';
     var who = !w.who ? '' : ch ? '<a class="sh-ch" href="' + esc(chUrl(ch)) + '" target="_blank" rel="noopener" draggable="false">' + av + '<b>' + esc(w.who) + '</b></a>'
       : '<span class="sh-ch">' + av + '<b>' + esc(w.who) + '</b></span>';
-    var acts = (w.likes != null ? '<div class="sh-a"><span class="sh-i">' + ICON.like + '</span><span>' + abbr(w.likes) + '<span class="sr"> Me gusta</span></span></div>' : '') +
+    var acts = (w.likes != null ? '<div class="sh-a"><button class="sh-i" type="button" data-like aria-label="Me gusta">' + ICON.like + '</button><span>' + abbr(w.likes) + '<span class="sr"> Me gusta</span></span></div>' : '') +
       (w.views != null ? '<div class="sh-a v"><span class="sh-i">' + ICON.views + '</span><span>' + abbr(w.views) + '<span class="sr"> views</span></span></div>' : '');
     var text = w.desc ? linkify(w.desc) : '';
     var foot = (w.who ? (ch ? '<a class="sd-ch" href="' + esc(chUrl(ch)) + '" target="_blank" rel="noopener">' + av + '<b>' + esc(w.who) + '</b></a>' : '<span class="sd-ch">' + av + '<b>' + esc(w.who) + '</b></span>') : '') +
       (w.views != null ? '<span class="sd-n sd-v">' + ICON.views + abbr(w.views) + '<span class="sr"> views</span></span>' : '') +
-      (w.likes != null ? '<span class="sd-n">' + ICON.like + abbr(w.likes) + '<span class="sr"> Me gusta</span></span>' : '');
+      (w.likes != null ? '<button class="sd-n" type="button" data-like>' + ICON.like + abbr(w.likes) + '<span class="sr"> Me gusta</span></button>' : '');
     return '<article class="sh-it" data-short="' + w.id + '" aria-label="' + esc(w.title) + '">' +
       '<div class="sh-v"><img src="' + esc(w.thumb) + '" alt="" draggable="false">' +
       '<button class="play" type="button" aria-label="' + esc('Reproducir “' + w.title + '”') + '"><span>▶</span></button>' +
-      '<div class="sh-info">' + who + '<p class="sh-ttl">' + esc(w.title) + '</p>' + (text ? '<div class="sh-dx">' + text + '</div>' : '') + '</div>' +
+      '<div class="sh-info">' + who + '<p class="sh-ttl">' + esc(w.title) + '</p>' +
+      (text ? '<button class="sh-more" type="button" aria-expanded="false">…más</button><div class="sh-dx">' + text + '</div>' : '') + '</div>' +
       (w.drive ? '' : '<div class="sh-tap" aria-hidden="true"></div><div class="pc"><button class="pc-pp" type="button" aria-label="Pausar"></button><div class="pc-bar" hidden><i></i></div></div>') + '</div>' +
       '<div class="sh-act">' + acts + '</div>' +
       '<aside class="sh-pan" aria-label="Descripción"><h3 class="sd-t">' + esc(w.title) + '</h3><button class="x sd-x" type="button" data-close aria-label="Cerrar">✕</button>' +
@@ -1017,16 +1152,18 @@
     if (n === SH.i) return;
     var prev = SH.items[SH.i];
     if (prev) {                                            // el que se va deja de sonar
-      prev.classList.remove('on', 'ctl');
-      stopHere(prev.querySelector('.sh-v'));
+      prev.classList.remove('on', 'ctl', 'clean');
+      reelStop(prev);
+      closeDesc(prev);
       var dx = prev.querySelector('.sh-dx'); if (dx) dx.scrollTop = 0;
     }
     SH.i = n;
     var it = SH.items[n];
     if (!it) return;
     it.classList.add('on');
-    var pb = it.querySelector('.sh-v .play'), sw = byId[it.dataset.short];   // el que queda en pantalla arranca solo
-    if (LIVE && pb && !pb.hidden && sw && embedOf(sw)) { playHere(pb, pb.closest('.sh-v'), sw); reelHook(it); }
+    reelGo(it);                                          // el que queda en pantalla arranca solo
+    SH.items.forEach(function (x, k) { if (Math.abs(k - n) > 1) stopHere(x.querySelector('.sh-v')); });   // los lejos se descargan
+    reelPre(SH.items[n + 1]); reelPre(SH.items[n - 1]);  // el de abajo y el de arriba, listos
     var btns = SH.d.querySelectorAll('.sh-nav button');
     btns[0].disabled = n === 0; btns[1].disabled = n === SH.items.length - 1;
     SB();
@@ -1068,7 +1205,7 @@
     f.addEventListener('pointermove', function (e) {
       if (!drag || e.pointerId !== drag.id) return;
       var dy = e.clientY - drag.y, now = performance.now();
-      if (!drag.on && Math.abs(dy) > 6) { drag.on = true; moved = true; f.classList.add('drag'); f.setPointerCapture(e.pointerId); }
+      if (!drag.on && Math.abs(dy) > 6) { drag.on = true; moved = true; f.classList.add('drag'); f.setPointerCapture(e.pointerId); noSel(); }
       if (!drag.on) return;
       f.scrollTop = drag.top - dy;
       drag.v = 0.8 * drag.v + 0.2 * ((e.clientY - drag.ly) / Math.max(1, now - drag.lt));   // px por ms
@@ -1111,13 +1248,25 @@
       WB();
       return;
     }
+    if ((el = t.closest('[data-like]'))) return burst(el);                            // el corazón
     if ((el = t.closest('[data-mini]'))) return miniAct(el.dataset.mini);              // el mini reproductor
     if ((el = t.closest('[data-watch]'))) return openWatch(el.dataset.watch, el);   // de la lista del reproductor
     if ((el = t.closest('.sh-it:not(.on)'))) return shGo(SH.items.indexOf(el));     // el de abajo (o arriba): pasa a ese
     if (t.closest('.sh-dx')) return;                                                  // leyendo la descripción: no es play
-    if ((el = t.closest('.sh-it.on .pc-pp'))) { pCmd(RP, sounds(RP) ? 'pause' : 'play'); paintReel(); return reelCtl(el.closest('.sh-it'), true); }
-    if ((el = t.closest('.sh-it.on .sh-tap'))) { el = el.closest('.sh-it'); return reelCtl(el, !el.classList.contains('ctl')); }   // un toque: los controles
-    if ((el = t.closest('.sh-v .play'))) { playHere(el, el.closest('.sh-v'), byId[el.closest('.sh-it').dataset.short]); return reelHook(el.closest('.sh-it')); }
+    if ((el = t.closest('.sh-it.on .pc-pp'))) { pCmd(RP, sounds(RP) ? 'pause' : 'play'); return paintReel(); }   // el botón del medio
+    if ((el = t.closest('.sh-more'))) {                                              // la descripción: se abre y se cierra
+      var inf = el.closest('.sh-info'), op = inf.classList.toggle('open');
+      el.textContent = op ? 'Mostrar menos' : '…más'; el.setAttribute('aria-expanded', String(op));
+      return;
+    }
+    if ((el = t.closest('.sh-it.on .sh-tap'))) {                                    // un toque en el video
+      el = el.closest('.sh-it');
+      if (ytPaused(RP)) { pCmd(RP, 'play'); return paintReel(); }                 // en pausa: sigue
+      if (getComputedStyle(el.querySelector('.sh-info')).display === 'none') { pCmd(RP, sounds(RP) ? 'pause' : 'play'); return paintReel(); }   // en la compu, pausa
+      if (el.classList.toggle('clean')) closeDesc(el);                            // en el celular: esconde todo (y la descripción vuelve a cerrarse) o lo muestra
+      return;
+    }
+    if ((el = t.closest('.sh-v .play'))) return reelGo(el.closest('.sh-it'));
     if ((el = t.closest('[data-sh]'))) return shGo(SH.i + (+el.dataset.sh));
     if ((el = t.closest('[data-work]'))) return openWork(el.dataset.work);
     if (t.closest('[data-close]')) { el = t.closest('dialog'); return el === WD ? closeWatch() : el.close(); }
@@ -1165,7 +1314,7 @@
       var face = l.icon ? '<img class="tl-ic" src="' + esc(l.icon) + '" alt="" draggable="false">'                  // el ícono oficial, si la config lo trae
         : b ? '<i class="fa-brands fa-' + b + '" aria-hidden="true"></i><span class="tl-gen">' + (ICONS[l.id] || ICONS.play) + '</span>'   // el de la marca; si no carga, el de muestra
         : ICONS.link;
-      return '<a class="tl-' + esc(l.id || 'link') + '" href="' + esc(l.url) + '" target="_blank" rel="noopener" title="' + esc(l.label || '') + '" aria-label="' + esc(l.label || l.url) + '" draggable="false">' + face + '</a>';
+      return '<a class="tl-' + esc(l.id || 'link') + '" href="' + esc(l.url) + '" target="_blank" rel="noopener" data-tip="' + esc(l.label || '') + '" aria-label="' + esc(l.label || l.url) + '" draggable="false">' + face + '</a>';
     }).join('');
   }
   // el canal de arriba: la foto (abre el canal en YouTube), el nombre, el canal con sus suscriptores (de
@@ -1235,9 +1384,10 @@
         set('--avx', q(0, G.tax - G.ax).toFixed(1) + 'px'); set('--avy', q(0, G.tay - G.ay).toFixed(1) + 'px'); set('--avs', q(1, G.ts / G.as).toFixed(4));
         set('--nx', q(0, G.tnx - G.nx).toFixed(1) + 'px'); set('--ny', q(0, G.tny - G.ny).toFixed(1) + 'px'); set('--ns', q(1, G.k).toFixed(4));
       }
-      set('--chR', Math.max(0, 1 - p * 2.2).toFixed(3));                       // lo demás se apaga primero
-      set('--chB', Math.max(0, Math.min(1, (p - .55) / .45)).toFixed(3));       // el fondo de barra, al final
-      set('--chI', Math.max(0, Math.min(1, (p - .7) / .3)).toFixed(3));         // los íconos, al final
+      if (!BYCSS) {
+        set('--chR', Math.max(0, 1 - p * 2.2).toFixed(3));                     // lo demás se apaga primero
+        set('--chI', Math.max(0, Math.min(1, (p - .7) / .3)).toFixed(3));       // los íconos, al final
+      }
       ch.classList.toggle('gone', p > .45); ch.classList.toggle('bar', p > .98);
     }
     PAGE.addEventListener('scroll', function () { if (!raf) raf = requestAnimationFrame(paint); }, { passive: true });

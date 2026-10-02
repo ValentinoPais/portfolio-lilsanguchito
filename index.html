@@ -71,11 +71,14 @@ img { display: block; max-width: 100%; }
 .top { position: absolute; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: var(--barH); padding: env(safe-area-inset-top, 0px) calc(16px + env(safe-area-inset-right, 0px)) 0 calc(16px + env(safe-area-inset-left, 0px)); background: rgba(11, 11, 10, .74); -webkit-backdrop-filter: blur(20px) saturate(1.3); backdrop-filter: blur(20px) saturate(1.3); }
 .top-t { min-width: 0; font: 700 20px/28px var(--sans); letter-spacing: -.01em; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color .2s; }   /* tocarlo baja hasta el final y, si ya estás abajo, sube */
 .top-links { display: flex; gap: var(--gut); }
-.top-links a { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--acc); transition: background .2s; }
+.top-links a { position: relative; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--acc); transition: background .2s; }
 .top-links svg, .top-links img.tl-ic { width: 22px; height: 22px; }
 .top-links .svg-inline--fa { width: 22px; height: 22px; font-size: 22px; }
 .top-links a:has(.svg-inline--fa) .tl-gen { display: none; }   /* el de muestra, solo si no cargó el de la marca */
-@media (hover: hover) { .top-links a:hover { background: var(--hl); } }   /* sin imagen: se ilumina el recuadro, como los botones */
+@media (hover: hover) { .top-links a:hover { background: var(--hl); } }
+/* el nombre de cada ícono, en un cartel tipo pill como el del título del video (sin los del navegador) */
+.top-links a[data-tip]:not([data-tip=""])::after { content: attr(data-tip); position: absolute; top: calc(100% + 6px); right: 0; padding: 7px 12px; border-radius: 999px; background: var(--text); color: #0f0f0f; font: 500 12px/1 var(--sans); white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .15s; box-shadow: 0 8px 20px -8px rgba(0, 0, 0, .9); }
+@media (hover: hover) { .top-links a[data-tip]:not([data-tip=""]):hover::after { opacity: 1; } }   /* sin imagen: se ilumina el recuadro, como los botones */
 
 
 /* ---------- el canal: arriba de todo, como el encabezado de un canal de YouTube ----------
@@ -87,7 +90,9 @@ img { display: block; max-width: 100%; }
 /* arriba de todo no hay barra: está el canal entero. Al bajar se achica hasta ser una barra como la de antes y
    queda pegado arriba, con su franja de abajo a la vista: la foto chica y el nombre van a la franja, lo demás se
    apaga y aparecen los íconos y el fondo de barra (app.js lo va moviendo con el scroll) */
-.ch { position: sticky; top: calc(-1 * var(--chD, 0px)); z-index: 10; background: rgba(11, 11, 10, calc(.74 * var(--chB, 0))); -webkit-backdrop-filter: blur(calc(20px * var(--chB, 0))) saturate(calc(1 + .3 * var(--chB, 0))); backdrop-filter: blur(calc(20px * var(--chB, 0))) saturate(calc(1 + .3 * var(--chB, 0))); }
+.ch { position: sticky; top: calc(-1 * var(--chD, 0px)); z-index: 10; }
+.ch::after { content: ""; position: absolute; z-index: -1; left: 0; right: 0; bottom: 0; height: var(--barH); background: rgba(11, 11, 10, .74); -webkit-backdrop-filter: blur(20px) saturate(1.3); backdrop-filter: blur(20px) saturate(1.3); opacity: 0; transition: opacity .25s; pointer-events: none; }   /* el fondo de barra, solo en la franja que queda arriba y recién cuando es barra: liviano al scrollear */
+.ch.bar::after { opacity: 1; }
 #topbar[hidden] { display: none; }   /* ya no hay barra fija: es el canal, achicado */
 .ch-avw { flex: none; transform-origin: 0 0; transform: translate(var(--avx, 0px), var(--avy, 0px)) scale(var(--avs, 1)); }
 .ch-n { transform-origin: 0 0; transform: translate(var(--nx, 0px), var(--ny, 0px)) scale(var(--ns, 1)); }
@@ -97,7 +102,11 @@ img { display: block; max-width: 100%; }
 @supports (animation-timeline: scroll()) {   /* lo mueve el navegador junto con el scroll, en el mismo cuadro: sin temblor */
   .ch-avw { transform: none; animation: ch-av linear both; animation-timeline: scroll(nearest block); animation-range: 0px var(--chD, 1px); }
   .ch-n { transform: none; animation: ch-nm linear both; animation-timeline: scroll(nearest block); animation-range: 0px var(--chD, 1px); }
+  .ch-s, .ch-d, .ch-l { opacity: 1; animation: ch-out linear both; animation-timeline: scroll(nearest block); animation-range: 0px calc(var(--chD, 1px) * .45); }
+  .ch .top-links { opacity: 1; animation: ch-in linear both; animation-timeline: scroll(nearest block); animation-range: calc(var(--chD, 1px) * .7) var(--chD, 1px); }
 }
+@keyframes ch-out { to { opacity: 0; } }
+@keyframes ch-in { from { opacity: 0; } to { opacity: 1; } }
 .ch-s, .ch-d, .ch-l { opacity: var(--chR, 1); }
 .ch.gone .ch-s, .ch.gone .ch-d, .ch.gone .ch-l { visibility: hidden; }
 .ch .top-links { position: absolute; z-index: 1; right: var(--chPR, 16px); top: calc(var(--chD, 0px) + env(safe-area-inset-top, 0px) + 8px); opacity: var(--chI, 0); }
@@ -178,7 +187,7 @@ a.w-chl::before, a.sd-ch::before { content: ""; position: absolute; inset: calc(
 .yt-s { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font: 400 14px/20px var(--sans); color: var(--muted); }
 a.yt-ch:hover, a.yt-ch:focus-visible { color: var(--text); }
 .yt-v, .w-views, .w-it-s.w-it-v { white-space: nowrap; color: var(--acc); }   /* las views, resaltadas con el acento */
-.yt-v i, .w-it-s i { font-style: normal; font-size: .75em; line-height: 0; }   /* el ▶ chico no agranda el renglón */
+.yt-v svg, .w-it-v svg { width: 1.15em; height: 1.15em; vertical-align: -.2em; }   /* el ojo de las views, del alto del texto: no agranda el renglón */
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .work.v .yt-m { margin-top: 10px; }
 .work.v .yt-s { font-size: 14px; }
@@ -215,7 +224,7 @@ a.yt-ch:hover, a.yt-ch:focus-visible { color: var(--text); }
 .car { position: relative; }
 .track { position: relative; display: grid; grid-auto-flow: column; gap: var(--gut); overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-y; scrollbar-width: none; align-items: start; padding: 16px var(--gut); margin: -16px calc(-1 * var(--gut)); scroll-padding-inline: var(--gut); }   /* de borde a borde */
 .track::-webkit-scrollbar { display: none; }
-.track > * { translate: var(--sub, 0px) 0; }   /* el pedacito de píxel que el scroll no acepta: así el paso automático es suave */
+.track { will-change: transform; }   /* el pedacito de píxel que el scroll no acepta lo corre la fila entera (app.js): suave y liviano */
 /* sin imán en ningún lado: la fila anda sola todo el tiempo (con imán, en el celular no podía avanzar) */
 .track.dragging { cursor: grabbing; user-select: none; }
 .track.dragging .work { cursor: grabbing; }
@@ -294,7 +303,10 @@ dialog.watch .panel { --side: 360px; --meta: 148px; --stage: min(100vw - 2 * var
 .w-side { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .w-sh { flex: none; display: flex; align-items: center; min-height: 36px; padding-right: 44px; margin-bottom: 0; font: 700 16px/22px var(--sans); }
 .w-side .chips { flex: none; max-width: none; margin: 4px 0 8px; }   /* los temas, arriba de la lista, como los de la página */
-.w-side .chip-r { margin: -4px; padding: 4px; scroll-padding-inline: 0; }   /* alineados con el título de la lista, también en el celular */
+.w-side .chip-r { margin: -4px; padding: 4px; scroll-padding-inline: 0; scroll-behavior: auto; touch-action: pan-y; cursor: grab; }   /* alineados con el título de la lista, también en el celular */
+.chip-a { display: none !important; }   /* sin flechas: los temas se deslizan con el dedo o el mouse y, si no entran todos, avanzan solos como los reels */
+.chip-r { scroll-behavior: auto; touch-action: pan-y; cursor: grab; will-change: transform; }
+.chip-r.dragging { cursor: grabbing; user-select: none; }
 .w-side .chip-a.prev { background: linear-gradient(to right, var(--bg2) 50%, rgba(21, 21, 20, 0)); }
 .w-side .chip-a.next { background: linear-gradient(to left, var(--bg2) 50%, rgba(21, 21, 20, 0)); }
 .w-x { position: absolute; top: var(--gut); right: var(--gut); z-index: 2; background: var(--bg2); }
@@ -406,6 +418,14 @@ dialog.shorts[open] { display: block; }
 .sd-n { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .sd-n svg { width: 16px; height: 16px; flex: none; }
 .sd-n.sd-v { color: var(--acc); }   /* las views, en violeta como en toda la página */
+/* el corazón de los likes: en el horizontal, junto al canal, como el botón de YouTube; tocándolo, corazones que
+   suben y se apagan, cada uno para su lado (como en los vivos de Instagram), con un ruidito */
+.w-like { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: rgba(236, 234, 228, .1); color: var(--text); font: 500 14px/1 var(--sans); white-space: nowrap; cursor: pointer; transition: background-color .2s; }
+.w-like svg { width: 20px; height: 20px; color: var(--acc); }
+@media (hover: hover) { .w-like:hover { background: rgba(236, 234, 228, .2); } }
+button.sd-n { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.heart-fly { position: fixed; z-index: 60; pointer-events: none; }
+.heart-fly svg { display: block; width: 100%; height: 100%; }
 /* sobre el video (tablet y celular): el canal, el título y la descripción */
 .sh-info { display: none; position: absolute; left: 0; right: 0; bottom: 0; padding: 96px var(--tx) var(--tx); background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .8) 45%); pointer-events: none; }
 .sh-ch { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; font: 500 14px/20px var(--sans); pointer-events: auto; }
@@ -478,22 +498,53 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
 .w-tap { display: none; touch-action: none; }
 .sh-tap { touch-action: pan-y; }
 .pc { position: absolute; inset: 0; z-index: 6; opacity: 0; pointer-events: none; transition: opacity .15s; background: linear-gradient(rgba(0, 0, 0, .3), rgba(0, 0, 0, 0) 28%, rgba(0, 0, 0, 0) 62%, rgba(0, 0, 0, .55)); }
-.sh-it.ctl .sh-v > .pc { opacity: 1; }
-.sh-it.ctl .sh-v > .pc > * { pointer-events: auto; }
+/* los verticales: el título, el canal, los números, la barrita y la pausa en el medio se ven siempre; un toque
+   en el video los esconde (queda el video solo) y otro los vuelve a mostrar. El único botón es el del medio: la
+   pausa y, en pausa, el play (el de YouTube, en el mismo lugar), que con un toque hace seguir */
+.sh-v > .pc { background: none; }
+.sh-v.live > .pc { opacity: 1; }
+.sh-v.live > .pc > .pc-bar, .sh-v.live > .pc > .pc-pp { pointer-events: auto; }
+.sh-it .sh-info, .sh-it .sh-act, .sh-v > .pc { transition: opacity .2s; }
+.sh-it.clean .sh-info, .sh-it.clean .sh-act, .sh-it.clean .sh-v > .pc { opacity: 0; pointer-events: none; }
+.sh-it.clean .sh-info *, .sh-it.clean .sh-act * { pointer-events: none !important; }
+button.sh-i { padding: 0; border: 0; color: var(--text); cursor: pointer; }
+/* la descripción, cerrada; con “…más” se abre, como en YouTube */
+.sh-info:not(.open) .sh-dx { display: none; }
+.sh-more { display: block; margin: 4px 0 0; padding: 0; border: 0; background: none; color: var(--text); font: 500 13px/18px var(--sans); pointer-events: auto; cursor: pointer; }
+.sh-info.open { background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .88) 22%); }
 @media (max-width: 1000px) { .stage.ctl > .pc { opacity: 1; } .stage.ctl > .pc > * { pointer-events: auto; } }   /* en la compu, el horizontal usa los de YouTube */
 .pc-pp { position: absolute; left: 50%; top: 50%; translate: -50% -50%; width: 64px; height: 64px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; background: rgba(11, 11, 10, .55); color: #fff; }
 .pc-pp svg { width: 34px; height: 34px; }
 .pc-bar { position: absolute; left: 12px; right: 12px; bottom: 8px; height: 24px; display: flex; align-items: center; touch-action: none; cursor: pointer; }
-.pc-bar[hidden], .pc-fs[hidden] { display: none; }
+.pc-bar[hidden], .pc-fs[hidden], .pc-pp[hidden], .mi-b[hidden] { display: none; }
 .pc-bar::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 3px; margin-top: -1.5px; background: rgba(255, 255, 255, .3); }
 .pc-bar i { position: relative; width: 0; height: 3px; background: var(--acc); }
 .pc-bar i::after { content: ""; position: absolute; right: -6px; top: -4.5px; width: 12px; height: 12px; border-radius: 50%; background: var(--acc); }
 .pc-fs { position: absolute; right: 6px; bottom: 30px; width: 40px; height: 40px; padding: 0; border: 0; background: none; color: #fff; display: grid; place-items: center; }
 .pc-fs svg { width: 26px; height: 26px; }
 .stage:fullscreen { width: 100%; height: 100%; aspect-ratio: auto; }
-@media (max-width: 1000px) { .stage.playing:not(.dr) .w-tap { display: block; } }
+.pc-time { position: absolute; left: 12px; bottom: 38px; color: #fff; font: 500 12px/1 var(--sans); text-shadow: 0 1px 2px rgba(0, 0, 0, .8); font-variant-numeric: tabular-nums; }   /* en qué segundo va y cuánto dura */
+.pc-time:empty { display: none; }
+/* nada de lo de YouTube encima: lo de arriba y lo de abajo del reproductor quedan afuera y, en pausa (o al
+   terminar), en vez de la pantalla de pausa de YouTube va la miniatura con nuestro play */
+.sh-v.paused iframe { visibility: hidden; }
+@media (max-width: 1000px) {
+  dialog.watch:not(.mini) .stage:not(:fullscreen) iframe.yt { top: -60px; bottom: auto; height: calc(100% + 120px); }
+  dialog.watch:not(.mini) .stage.paused iframe { visibility: hidden; }
+  .w-handle { position: absolute; z-index: 6; top: 8px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: rgba(236, 234, 228, .75); box-shadow: 0 1px 4px rgba(0, 0, 0, .6); pointer-events: none; }   /* se arrastra de arriba para abajo para cerrarlo */
+  dialog.watch.mini .w-handle, .stage:fullscreen .w-handle { display: none; }
+}
+.w-handle { display: none; }
+@media (max-width: 1000px) { .w-handle { display: block; } dialog.watch.mini .w-handle, .stage:fullscreen .w-handle { display: none; } }
+@media (max-width: 1000px) { .stage.playing:not(.dr):not(.yield) .w-tap { display: block; } }   /* desde que se abre: se baja aunque no haya cargado */
+/* hasta que el reproductor arranca, ni capa ni controles nuestros: si el navegador no lo deja arrancar solo, se
+   ve un solo play, el de YouTube, y se toca ese */
+.sh-tap { display: none; }
+.sh-v.live .sh-tap { display: block; }
+.stage:not(.live) > .pc, .sh-v:not(.live) > .pc { display: none; }
+.sh-v iframe.pre { visibility: hidden; }   /* el de abajo y el de arriba, ya cargados y escondidos */
 dialog.watch.mini .w-tap, dialog.watch.mini .pc { display: none; }
-.sh-it.ctl .sh-info, .sh-it.ctl .sh-act { z-index: 6; }   /* con los controles, también el título, el canal y los números */
+.sh-it.on .sh-info, .sh-it.on .sh-act { z-index: 6; }   /* el título, el canal y los números, siempre a la vista encima del video; los controles, al tocarlo */
 .sh-v .pc-bar { left: 0; right: 0; bottom: 0; height: 18px; align-items: flex-end; }
 .sh-v .pc-bar::before { top: auto; bottom: 0; margin: 0; }
 .sh-v .pc-bar i::after { display: none; }
@@ -589,7 +640,7 @@ dialog.watch.mini .w-tap, dialog.watch.mini .pc { display: none; }
 <dialog class="dlg watch" id="dlgWatch" aria-labelledby="w-t">
   <div class="panel" tabindex="-1" autofocus>
     <div class="w-main" id="w-main">
-      <div class="stage h" id="w-stage"><img id="w-img" alt=""><span class="dur" id="w-dur"></span><button class="play" id="w-play" type="button" aria-label="Reproducir"><span>▶</span></button><div class="mi-over" data-mini="open" aria-hidden="true"></div><div class="w-tap" aria-hidden="true"></div><div class="pc"><button class="pc-pp" id="w-pp" type="button" aria-label="Pausar"></button><div class="pc-bar" id="w-bar" hidden><i></i></div><button class="pc-fs" id="w-fs" type="button" aria-label="Pantalla completa" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" fill="currentColor"/></svg></button></div></div>
+      <div class="stage h" id="w-stage"><img id="w-img" alt=""><span class="dur" id="w-dur"></span><button class="play" id="w-play" type="button" aria-label="Reproducir"><span>▶</span></button><div class="mi-over" data-mini="video" aria-hidden="true"></div><div class="w-tap" aria-hidden="true"></div><i class="w-handle" aria-hidden="true"></i><div class="pc"><button class="pc-pp" id="w-pp" type="button" aria-label="Pausar"></button><span class="pc-time" id="w-time"></span><div class="pc-bar" id="w-bar" hidden><i></i></div><button class="pc-fs" id="w-fs" type="button" aria-label="Pantalla completa" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" fill="currentColor"/></svg></button></div></div>
       <div class="w-body" id="w-body">
         <h2 class="w-t" id="w-t"></h2>
         <div class="w-ch" id="w-ch"></div>
