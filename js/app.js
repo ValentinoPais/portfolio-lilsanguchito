@@ -5,9 +5,17 @@
   'use strict';
   // las imágenes aparecen suave cuando terminan de cargar (el fundido está en el CSS): acá se marca cada una
   document.addEventListener('load', function (e) { var t = e.target; if (t && t.tagName === 'IMG') t.classList.add('ok'); }, true);
+  // la pantalla de carga se va cuando la página está lista (y, si algo se traba, igual a los 12 segundos)
+  var loader = document.getElementById('carga'), T0 = performance.now();
+  function loaded() {
+    if (!loader || loader.classList.contains('out')) return;
+    loader.classList.add('out');
+    setTimeout(function () { if (loader) loader.remove(); loader = null; }, 600);
+  }
+  setTimeout(loaded, 12000);
   var ready = window.loadSiteData ? window.loadSiteData() : Promise.resolve(window.MOCK_DATA);
   ready.then(function (M) { start(M); }, function () { start(window.MOCK_DATA); })
-    .catch(function (e) { setTimeout(function () { throw e; }); });   // un error de la web, a la consola
+    .catch(function (e) { loaded(); setTimeout(function () { throw e; }); });   // un error de la web, a la consola
   function start(M) {
   var EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" fill="currentColor"/></svg>';   // las views, con un ojo en toda la página
   var LIVE = !!M.live;                               // datos reales: los videos se reproducen de verdad
@@ -34,7 +42,6 @@
     var h = +m[1] || 0, mi = +m[2] || 0, s = +m[3] || 0;
     return h ? h + ':' + p(mi) + ':' + p(s) : mi + ':' + p(s);
   }
-  function setHash(h) { try { history.replaceState(null, '', '#' + h); } catch (e) { /* sin historial: no pasa nada */ } }
 
   // ---------------- datos ----------------
   function parseLink(url) {
@@ -352,8 +359,8 @@
   // tienen a los que menos (a igual cantidad, el del video con más views primero). Salen solos, de lo que
   // YouTube dice de cada video. Van los que tienen al menos dos videos (si así quedan menos de tres, también
   // los de uno) y no va uno que tengan todos, porque sería lo mismo que Todo. Tocando uno, quedan solo sus
-  // videos (los de Drive y TikTok no tienen temas: están en Todo). Si no entran, se deslizan de costado y,
-  // con mouse, aparecen las flechas.
+  // videos (los de Drive y TikTok no tienen temas: están en Todo). Se deslizan con el dedo o el mouse y, si no
+  // entran todos, avanzan solos, como los reels.
   function topicsFor(pool) {                         // los temas de un grupo de videos, con esas reglas
     var count = {}, list = [];
     pool.slice().sort(byViews).forEach(function (w) {
@@ -373,18 +380,8 @@
       return '<button class="chip" type="button" data-topic="' + esc(t) + '" aria-pressed="' + (t === cur) + '">' + esc(t || 'Todo') + '</button>';
     }).join('');
     box.hidden = false;
-    function edges() {                               // las flechas, solo si hay más para ese lado
-      var max = row.scrollWidth - row.clientWidth;
-      box.classList.toggle('l', row.scrollLeft > 2);
-      box.classList.toggle('r', row.scrollLeft < max - 2);
-    }
     function set(t) { cur = t; [].forEach.call(row.children, function (c) { c.setAttribute('aria-pressed', String(c.dataset.topic === t)); }); }
-    row.addEventListener('scroll', edges, { passive: true });
-    if (window.ResizeObserver) new ResizeObserver(edges).observe(row);
-    edges();
     box.addEventListener('click', function (e) {
-      var a = e.target.closest('.chip-a');
-      if (a) { row.scrollBy({ left: (a.classList.contains('next') ? 1 : -1) * row.clientWidth * .7, behavior: reduce ? 'auto' : 'smooth' }); return; }
       var b = e.target.closest('.chip');
       if (!b || b.dataset.topic === cur) return;
       set(b.dataset.topic);
@@ -395,7 +392,7 @@
       else if (cr.right > r.right - 40) row.scrollBy({ left: cr.right - r.right + 40, behavior: reduce ? 'auto' : 'smooth' });
       pick(cur);
     });
-    return { set: function (t) { set(t); row.scrollLeft = 0; edges(); } };
+    return { set: function (t) { set(t); row.scrollLeft = 0; } };
   }
   (function () {
     var list = topicsFor(works);
@@ -541,17 +538,18 @@
     return w.vertical ? openShorts(id) : openWatch(id);   // horizontales: como YouTube; verticales: como Shorts
   }
   // El play es a mano: recién ahí se carga el reproductor de YouTube, Drive o TikTok, en el lugar de la
-  // miniatura. Un video que su canal no deja insertar se abre en YouTube. Con los datos de ejemplo, un aviso.
-  function embedOf(w, pre, at) {                     // at: el segundo donde arranca (al recargarlo)                         // pre: se carga sin arrancar (el vertical de abajo o de arriba)
-    var bare = w.vertical || stacked();               // sin los controles de YouTube: se maneja con los de encima
-    if (w.yt) return w.embed ? 'https://www.youtube-nocookie.com/embed/' + w.yt + '?autoplay=' + (pre ? 0 : 1) + '&playsinline=1&rel=0&enablejsapi=1' + (bare ? '&controls=0&fs=0&disablekb=1' : '') +   // enablejsapi: lo manejan los controles de encima
-      (at ? '&start=' + at : '') + (location.origin && location.origin !== 'null' ? '&origin=' + encodeURIComponent(location.origin) : '') : '';
+  // miniatura (al abrir un video se aprieta solo). Un video que su canal no deja insertar se abre en YouTube.
+  // Con los datos de ejemplo, un aviso.
+  function embedOf(w, pre) {                         // pre: se carga sin arrancar (el vertical de abajo o de arriba)
+    // YouTube, siempre sin sus controles: encima van los nuestros, como los de YouTube (enablejsapi: así los manejan)
+    if (w.yt) return w.embed ? 'https://www.youtube-nocookie.com/embed/' + w.yt + '?autoplay=' + (pre ? 0 : 1) + '&playsinline=1&rel=0&enablejsapi=1&controls=0&fs=0&disablekb=1&iv_load_policy=3' +
+      (location.origin && location.origin !== 'null' ? '&origin=' + encodeURIComponent(location.origin) : '') : '';
     if (w.drive) return 'https://drive.google.com/file/d/' + w.drive + '/preview';
     if (w.tt) return 'https://www.tiktok.com/player/v1/' + w.tt + '?autoplay=' + (pre ? 0 : 1) + '&rel=0&loop=1&controls=0&progress_bar=0&play_button=0&volume_control=0&fullscreen_button=0&timestamp=0&music_info=0&description=0&native_context_menu=0&closed_caption=0';
     return '';
   }
-  function playHere(btn, stage, w, pre, at) {
-    var src = LIVE && w ? embedOf(w, pre, at) : '';
+  function playHere(btn, stage, w, pre) {
+    var src = LIVE && w ? embedOf(w, pre) : '';
     if (LIVE && w && !src) { if (!pre) window.open(w.out, '_blank', 'noopener'); return; }
     if (!pre && btn) btn.hidden = true;
     if (src) {
@@ -560,7 +558,8 @@
       f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.allowFullscreen = true;
       f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin'); f.className = (w.yt ? 'yt' : w.tt ? 'tt' : 'dr') + (pre ? ' pre' : '');
       f.addEventListener('load', function () { f.dataset.ok = '1'; });
-      stage.appendChild(f); if (!pre) stage.classList.add('playing'); stage.classList.toggle('dr', !!w.drive);
+      stage.insertBefore(f, stage.querySelector('.vp'));   // debajo de los controles
+      if (!pre) stage.classList.add('playing'); stage.classList.toggle('dr', !!w.drive);
       return;
     }
     if (pre) return;
@@ -570,16 +569,20 @@
   }
   function stopHere(stage) {                          // se va el video: deja de sonar y vuelve la miniatura
     if (!stage) return;
+    if (fsEl() && stage.contains(fsEl())) fsExit();
     if (RP.f && stage.contains(RP.f)) pReset(RP);
     [].forEach.call(stage.querySelectorAll('iframe, .msg'), function (x) { x.remove(); });
-    stage.classList.remove('playing');
+    stage.classList.remove('playing', 'live', 'yield', 'fin', 'dr');
     var pl = stage.querySelector('.play'); if (pl) pl.hidden = false;
-    if (stage.id === 'w-stage') { pReset(YT); stage.classList.remove('ctl', 'dr', 'yield'); }
+    vpReset(stage.querySelector('.vp'));
+    if (stage.id === 'w-stage') { pReset(YT); clearTimeout(UIT); vpReset($('#w-mini')); }
   }
   $('#w-play').addEventListener('click', function () {
-    playHere(this, $('#w-stage'), WA.now);
-    var f = $('#w-stage iframe'); if (f && WA.now && WA.now.yt) pHook(YT, f, 'yt');   // cómo va, play y pausa (mini reproductor y controles de encima)
-    paintWatch();
+    var st = $('#w-stage');
+    playHere(this, st, WA.now);
+    var f = $('#w-stage iframe'); if (f && WA.now && WA.now.yt) pHook(YT, f, 'yt');   // cómo va, play y pausa (los controles de encima y el mini)
+    clearTimeout(st._y); st._y = setTimeout(function () { if (f && YT.f === f && !YT.on) st.classList.add('yield'); }, 3000);   // si no arrancó solo (el navegador no lo dejó), queda a la vista el play de YouTube
+    paint(YT);
   });
 
   // ---------------- V1 · el video horizontal, como la página de un video en YouTube ----------------
@@ -623,14 +626,7 @@
     if (stacked()) { if (side.parentNode !== body) body.appendChild(side); }
     else if (side.parentNode === body) $('#dlgWatch .panel').insertBefore(side, $('#dlgWatch .w-x'));
   }
-  function relayWatch() {
-    var f = $('#w-stage iframe');
-    if (!f || !f.classList.contains('yt') || !WA.now || !$('#dlgWatch').open || $('#dlgWatch').classList.contains('mini')) return;
-    var at = Math.floor(YT.t || 0);
-    stopHere($('#w-stage')); playHere($('#w-play'), $('#w-stage'), WA.now, false, at);
-    var nf = $('#w-stage iframe'); if (nf) pHook(YT, nf, 'yt'); paintWatch();
-  }
-  var onStack = function () { placeSide(); relayWatch(); };
+  var onStack = function () { placeSide(); };
   if (STACK.addEventListener) STACK.addEventListener('change', onStack); else STACK.addListener(onStack);
   placeSide();
   function sideItem(v) {
@@ -642,10 +638,9 @@
   // los demás horizontales, sin el que estás viendo, con variedad (del tema elegido arriba de la lista)
   function listFor(w) {
     var pool = WA.topic ? hs.filter(function (v) { return (v.topics || []).indexOf(WA.topic) >= 0; }) : hs;
-    return { key: 'mix:' + w.id + ':' + WA.topic, title: 'Más trabajos', items: mix(w, pool).slice(1) };
+    return { key: 'mix:' + w.id + ':' + WA.topic, items: mix(w, pool).slice(1) };
   }
   function fillList(L) {
-    $('#w-more').textContent = L.title;
     $('#w-list').innerHTML = L.items.length ? L.items.map(sideItem).join('') : '<p class="empty">No hay otros videos con este tema.</p>';
     WA.key = L.key; WB();
   }
@@ -739,49 +734,95 @@
   });
 
   // ---------------- mini reproductor, como el de YouTube ----------------
-  // Si cerrás el reproductor con un video horizontal sonando (con la cruz, tocando afuera o con Esc), sigue en
-  // uno chico: en la compu, abajo a la derecha, con los botones encima del video al pasar el mouse; en el
-  // celular, una barra abajo de todo, como en la app. Tocándolo se agranda de nuevo y la cruz lo cierra. Es la
-  // misma ventana, achicada, así que el video no se corta ni se recarga. Con YouTube, además, el play y la
-  // pausa y la barrita de cuánto va (el reproductor de YouTube avisa cómo va y acepta órdenes).
-  var WD = $('#dlgWatch'), YT = { f: null, ok: false, st: -1, t: 0, d: 0 }, miOn = null;
-  var MINI_ICON = { play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
-    pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="currentColor"/></svg>' };
+  // Si cerrás el reproductor con un video horizontal sonando (con la cruz, tocando afuera, con Esc o bajándolo
+  // con el dedo), sigue en uno chico: en la compu, flotando en una esquina (se arrastra y queda en la más
+  // cercana), con el play y la cruz encima al pasar el mouse; en el celular, una barra abajo de todo, como en la
+  // app: el video, el título, el play y la cruz (y se baja con el dedo para cerrarlo). Tocándolo se agranda de
+  // nuevo. Es la misma ventana, achicada: el video no se corta ni se recarga y en pausa queda su cuadro.
+  var WD = $('#dlgWatch'), miOn = null;
   var isMini = function () { return WD.open && WD.classList.contains('mini'); };
   var sounding = function () { return !!$('#w-stage iframe') && (YT.on ? YT.st !== 0 && YT.st !== 2 : !YT.ok); };   // sin saberlo (Drive, o YouTube que todavía no avisó), cuenta como que suena
-  function setMini(on) { WD.classList.toggle('mini', on); if (!on) WD.classList.remove('ytoff'); document.documentElement.classList.toggle('has-mini', on); }
+  function setMini(on) { WD.classList.toggle('mini', on); document.documentElement.classList.toggle('has-mini', on); ui(false); }
   function reopen(mini) {                             // la misma ventana, grande o chica: el video sigue sonando
     WA.keep++; WD.close(); setMini(mini);
     if (mini) { WD.show(); miOn = null; paintMini(); try { PAGE.focus({ preventScroll: true }); } catch (e) {} }
     else { show(WD); requestAnimationFrame(fitDesc); setTimeout(WB, 320); }
     WB();
   }
-  function closeWatch() { if (!isMini() && sounding()) reopen(true); else WD.close(); }
+  function closeWatch() { if (fsEl()) fsExit(); if (!isMini() && sounding()) reopen(true); else WD.close(); }
   function hushMini() { if (!isMini()) return; if (YT.f && YT.ok) pCmd(YT, 'pause'); else WD.close(); }   // al abrir un vertical, el chico se calla
   function paintMini() {
     if (!isMini() || !WA.now) return;
-    $('#mi-t').textContent = WA.now.title; $('#mi-c').textContent = WA.now.who || '';
-    var on = YT.st === 1 || YT.st === 3, b = $('#mi-play');
-    b.hidden = $('#mi-bar').hidden = !YT.f || !YT.ok;
-    if (stacked() && ytPaused(YT)) b.hidden = true;   // en el celular, en pausa queda solo el play de YouTube, en el video
-    WD.classList.toggle('ytoff', !!YT.f && YT.ok && (YT.st === 2 || YT.st === 0));
-    if (miOn !== on) { miOn = on; b.innerHTML = on ? MINI_ICON.pause : MINI_ICON.play; b.setAttribute('aria-label', on ? 'Pausar' : 'Reproducir'); }
-    $('#mi-fill').style.width = YT.d ? Math.min(100, 100 * YT.t / YT.d).toFixed(2) + '%' : '0';
+    var tt = $('#mi-t'), cc = $('#mi-c'), b = $('#mi-play'), k = YT.end ? 'replay' : sounds(YT) ? 'pause' : 'play', hid = !YT.f || !YT.ok;
+    if (tt.textContent !== WA.now.title) tt.textContent = WA.now.title;
+    if (cc.textContent !== (WA.now.who || '')) cc.textContent = WA.now.who || '';
+    if (b.hidden !== hid) b.hidden = $('#mi-bar').hidden = hid;
+    if (miOn !== k) { miOn = k; b.innerHTML = ICO[k]; b.setAttribute('aria-label', LBL[k].replace(' (k)', '')); }
+    paintTime(YT);
   }
   function miniAct(a) {
-    if (a === 'video' && stacked() && ytPaused(YT)) { pCmd(YT, 'play'); return paintMini(); }   // en pausa, tocando el video sigue
     if (a === 'open' || a === 'video') return reopen(false);
     if (a === 'close') return WD.close();
-    if (a === 'play') pCmd(YT, sounds(YT) ? 'pause' : 'play');
+    if (a === 'play') pCmd(YT, sounds(YT) && !YT.end ? 'pause' : 'play');
   }
-  // ---------------- los reproductores de YouTube y TikTok ----------------
-  // Avisan cómo van (si suenan, en qué segundo van y cuánto duran) y aceptan órdenes (play, pausa, ir a un
-  // momento): así se manejan con los controles de encima. Hay dos: el del horizontal (YT) y el del vertical que
-  // está en pantalla (RP)
-  var RP = { f: null, kind: '', ok: false, on: false, st: -1, t: 0, d: 0 };
-  function pReset(S) { S.f = null; S.kind = ''; S.ok = false; S.on = false; S.st = -1; S.t = 0; S.d = 0; }
+
+  // ---------------- los reproductores, como los de YouTube ----------------
+  // YouTube se carga sin sus controles y encima van los nuestros, que andan como los de YouTube. En la compu: la
+  // barra de abajo (play, el siguiente, el volumen, el tiempo y pantalla completa, con la barrita para ir a
+  // cualquier momento) aparece al mover el mouse y se va sola; un clic pausa o sigue y doble clic es pantalla
+  // completa, con las teclas de YouTube (espacio o K, J y L, las flechas, M, F y los números). En el celular,
+  // como la app: un toque muestra los controles (el play o la pausa en el medio y abajo el tiempo y pantalla
+  // completa, sobre la barrita, que se ve siempre), que se van solos a los 3 segundos; dos toques a un costado
+  // saltan 10 segundos; deslizando para abajo se achica y para arriba, pantalla completa. Los verticales, como
+  // Shorts: un toque pausa (queda el play en el medio), dos toques es un me gusta y al terminar vuelven a
+  // empezar. Nada de lo de YouTube encima: el reproductor es más alto que el cuadro (su título y su logo quedan
+  // afuera), hasta que arranca se ve la miniatura, en pausa queda el cuadro del video y el horizontal se frena
+  // justo antes del final (sin la pantalla final de YouTube), con el botón para volver a verlo.
+  // Hay dos: el del horizontal (YT) y el del vertical que está en pantalla (RP). Avisan cómo van y aceptan órdenes.
+  var svg = function (d) { return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + d + '" fill="currentColor"/></svg>'; };
+  var ICO = {
+    play: svg('M8 5.14v13.72c0 .79.87 1.27 1.54.84l10.78-6.86a1 1 0 0 0 0-1.68L9.54 4.3A1 1 0 0 0 8 5.14z'),
+    pause: svg('M6.5 5h3.75v14H6.5zm7.25 0h3.75v14h-3.75z'),
+    replay: svg('M12 5V2L7.5 6.5 12 11V7.5a6 6 0 1 1-6 6H3.5a8.5 8.5 0 1 0 8.5-8.5z'),
+    next: svg('M6 18l8.5-6L6 6v12zm9-12v12h2.5V6H15z'),
+    vol: svg('M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.47 4.47 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06A9 9 0 0 0 14 3.23z'),
+    low: svg('M5 9v6h4l5 5V4L9 9H5zm11.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.47 4.47 0 0 0 16.5 12z'),
+    mute: svg('M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12a9 9 0 0 0-7-8.77v2.06A7 7 0 0 1 19 12zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a9 9 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z'),
+    fs: svg('M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z'),
+    fsx: svg('M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z')
+  };
+  var LBL = { play: 'Reproducir (k)', pause: 'Pausar (k)', replay: 'Volver a ver' };
+  var FINE = matchMedia('(hover: hover) and (pointer: fine)');   // con mouse: los controles de la compu; si no, los del celular
+  var fine = function () { return FINE.matches; };
+  // los controles de encima de un video: los del horizontal o (r) los de un vertical
+  function vpHTML(r) {
+    var vol = '<div class="vp-vol"><button class="vp-b vp-mute" type="button" aria-label="Silenciar (m)">' + ICO.vol + '</button>' +
+      '<div class="vp-vs" role="slider" aria-label="Volumen" aria-valuemin="0" aria-valuemax="100"><i></i></div></div>';
+    var sk = function (s) { return '<span class="vp-sk ' + s + '" aria-hidden="true"><span><i></i><i></i><i></i></span><b></b></span>'; };
+    return '<div class="vp' + (r ? ' r' : '') + '">' +
+      '<div class="vp-tap" aria-hidden="true"></div>' + (r ? '' : '<i class="vp-dim" aria-hidden="true"></i>' + sk('l') + sk('r')) +
+      '<i class="vp-spin" aria-hidden="true"></i>' +
+      '<button class="vp-big" type="button" aria-label="' + LBL.play + '">' + ICO.play + '</button>' +
+      (r ? '<div class="vp-top"><button class="vp-b vp-pp" type="button" aria-label="' + LBL.play + '">' + ICO.play + '</button>' + vol + '</div>' : '') +
+      (r ? '' : '<div class="vp-bot">' +             // los verticales, sin barrita: la que se ve es la del video
+        '<div class="vp-row"><button class="vp-b vp-pp" type="button" aria-label="' + LBL.play + '">' + ICO.play + '</button>' +
+          '<button class="vp-b vp-next" type="button" aria-label="Siguiente">' + ICO.next + '</button>' + vol +
+          '<span class="vp-time"><span class="vp-cur">0:00</span> / <span class="vp-len">0:00</span></span><span class="vp-gap"></span>' +
+          '<button class="vp-b vp-fs" type="button" aria-label="Pantalla completa (f)">' + ICO.fs + '</button></div>' +
+        '<div class="vp-bar" aria-hidden="true"><i class="vp-buf"></i><i class="vp-fill"></i><i class="vp-knob"></i><span class="vp-tip"></span></div>' +
+      '</div>') + '</div>';
+  }
+  function mk() { return { f: null, kind: '', ok: false, on: false, st: -1, t: 0, d: 0, at: 0, rate: 1, vol: 100, muted: false, buf: 0, end: false, since: 0, lp: 0, drag: null, was: false, sync: null, fin: 0 }; }
+  var YT = mk(), RP = mk();
+  function pReset(S) { var n = mk(), k; for (k in n) S[k] = n[k]; }
   var sounds = function (S) { return S.ok ? S.st === 1 || S.st === 3 : !!S.f; };   // si no avisa, cuenta como que suena
-  var ytPaused = function (S) { return S.kind === 'yt' && S.on && !sounds(S); };   // en pausa YouTube muestra su play en el medio: el nuestro, no
+  var endOf = function (S) { return S.fin && S.fin < S.d ? S.fin : S.d; };   // dónde termina de verdad: YouTube redondea la duración para arriba (dice 112 y termina en 111,2)
+  var tNow = function (S) { return S.st === 1 && S.at ? Math.min(S.d || 1e9, S.t + (performance.now() - S.at) / 1000 * (S.rate || 1)) : S.t; };   // entre aviso y aviso, el segundo se calcula
+  var clock = function (x) { x = Math.max(0, Math.floor(x || 0)); var h = Math.floor(x / 3600), m = Math.floor(x % 3600 / 60), k = x % 60; return (h ? h + ':' + (m < 10 ? '0' : '') : '') + m + ':' + (k < 10 ? '0' : '') + k; };
+  // el volumen elegido (o el silencio) queda para los videos que siguen, como en YouTube
+  var PREF = { vol: 100, muted: false };
+  try { var pv = JSON.parse(localStorage.getItem('portfolio-vol') || 'null'); if (pv && typeof pv.vol === 'number') PREF = { vol: pv.vol, muted: !!pv.muted }; } catch (e) {}
+  function savePref(S) { PREF = { vol: S.vol, muted: S.muted }; try { localStorage.setItem('portfolio-vol', JSON.stringify(PREF)); } catch (e) {} }
   function pHook(S, f, kind) {
     pReset(S); S.f = f; S.kind = kind;
     if (kind !== 'yt') return;                         // TikTok avisa solo
@@ -792,68 +833,301 @@
     };
     if (f.dataset.ok) hi(); else f.addEventListener('load', hi);   // el precargado ya está listo
   }
-  function post(f, kind, a, v) {                     // una orden a un reproductor
+  var YTF = { play: 'playVideo', pause: 'pauseVideo', seek: 'seekTo', mute: 'mute', unmute: 'unMute', vol: 'setVolume', cc: 'unloadModule' };
+  function post(f, kind, a, v, ahead) {              // una orden a un reproductor
     try {
-      if (kind === 'yt') f.contentWindow.postMessage(JSON.stringify({ event: 'command', func: { play: 'playVideo', pause: 'pauseVideo', seek: 'seekTo' }[a], args: a === 'seek' ? [v, true] : [] }), '*');
-      else if (kind === 'tt') f.contentWindow.postMessage({ 'x-tiktok-player': true, type: a === 'seek' ? 'seekTo' : a, value: v }, '*');
+      if (kind === 'yt') f.contentWindow.postMessage(JSON.stringify({ event: 'command', func: YTF[a], args: a === 'seek' ? [v, ahead !== false] : a === 'vol' ? [v] : a === 'cc' ? ['captions'] : [] }), '*');
+      else if (kind === 'tt' && /^(play|pause|seek|mute|unmute)$/.test(a)) f.contentWindow.postMessage({ 'x-tiktok-player': true, type: a === 'seek' ? 'seekTo' : a === 'unmute' ? 'unMute' : a, value: v }, '*');
     } catch (e) {}
   }
   function pStart(S) {                                // que arranque ya: insiste hasta que el reproductor avisa que suena
     var f = S.f, n = 0; S.st = -1;
     (function go() { if (S.f !== f || n++ > 12 || S.st === 1 || S.st === 3) return; post(f, S.kind, 'play'); setTimeout(go, 300); })();
   }
-  function pCmd(S, a, v) {                            // a: play, pause o seek (v: el segundo)
+  function pCmd(S, a, v, ahead) {                     // a: play, pause, seek (v: el segundo), mute, unmute o vol (v: de 0 a 100)
     if (!S.f) return;
-    post(S.f, S.kind, a, v);
-    if (a === 'seek') S.t = v; else { S.st = a === 'play' ? 1 : 2; S.ok = S.ok || S.kind === 'tt'; }   // se ve al toque, sin esperar el aviso
+    var now = performance.now();
+    if (a === 'play' && S.end) { post(S.f, S.kind, 'seek', 0); S.t = 0; S.at = now; }   // terminado: otra vez desde el principio
+    post(S.f, S.kind, a, v, ahead);
+    if (a === 'seek') { S.t = v; S.at = now; S.lp = 0; if (v < S.d - 1) S.end = false; }
+    else if (a === 'play' || a === 'pause') {          // se ve al toque, sin esperar el aviso
+      S.t = tNow(S); S.at = now; S.st = a === 'play' ? 1 : 2; S.ok = S.ok || S.kind === 'tt';
+      if (a === 'play') { S.end = false; S.since = now; }
+    } else if (a === 'mute' || a === 'unmute') S.muted = a === 'mute';
+    else if (a === 'vol') S.vol = v;
+    paint(S);
   }
   window.addEventListener('message', function (e) {
     var S = YT.f && e.source === YT.f.contentWindow ? YT : RP.f && e.source === RP.f.contentWindow ? RP : null;
     if (!S) return;
     var m; try { m = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch (x) { return; }
     if (!m || typeof m !== 'object') return;
+    var st = S.st, now = performance.now(), i;
     if (m.event) {                                     // YouTube
-      var i = m.info;
-      if (m.event === 'onStateChange' && typeof i === 'number') S.st = i;
+      i = m.info;
+      if (m.event === 'onStateChange' && typeof i === 'number') st = i;
       else if (i && typeof i === 'object') {
-        if (typeof i.playerState === 'number') S.st = i.playerState;
-        if (typeof i.currentTime === 'number') S.t = i.currentTime;
-        if (typeof i.duration === 'number') S.d = i.duration;
+        if (typeof i.playerState === 'number') st = i.playerState;
+        if (typeof i.currentTime === 'number' && S.drag == null) {
+          if (S === YT && S.end && S.st === 2 && i.currentTime > S.t + .2) post(S.f, 'yt', 'pause');   // se frenó para el final pero siguió: otra vez
+          S.t = i.currentTime; S.at = now;
+        }
+        if (i.progressState && i.progressState.seekableEnd > 1) S.fin = i.progressState.seekableEnd;
+        if (typeof i.duration === 'number' && i.duration > 0) S.d = i.duration;
+        if (typeof i.volume === 'number') S.vol = i.volume;
+        if (typeof i.muted === 'boolean') S.muted = i.muted;
+        if (typeof i.videoLoadedFraction === 'number') S.buf = i.videoLoadedFraction;
+        if (typeof i.playbackRate === 'number' && i.playbackRate > 0) S.rate = i.playbackRate;
       }
     } else if (m['x-tiktok-player']) {                 // TikTok
-      if (m.type === 'onStateChange' && typeof m.value === 'number') S.st = m.value;
-      else if (m.type === 'onCurrentTime' && m.value) { S.t = +m.value.currentTime || 0; S.d = +m.value.duration || S.d; }
+      if (m.type === 'onStateChange' && typeof m.value === 'number') st = m.value;
+      else if (m.type === 'onCurrentTime' && m.value) { S.t = +m.value.currentTime || 0; S.at = now; S.d = +m.value.duration || S.d; }
+      else if (m.type === 'onMute') S.muted = !!m.value;
     } else return;
-    S.ok = true; if (S.st === 1 || S.st === 3) S.on = true;   // ya arrancó: desde ahora se maneja con los de encima
-    if (S === RP && S.st === 0) { post(S.f, S.kind, 'seek', 0); post(S.f, S.kind, 'play'); S.st = 1; }   // el vertical terminó: vuelve a empezar, sin pantalla final
-    if (S === YT) { paintMini(); paintWatch(); } else paintReel();
+    if (!S.ok) {                                       // el primer aviso: con tu volumen y sin subtítulos, como en YouTube si no los pediste
+      S.ok = true;
+      if (S.kind === 'yt') post(S.f, 'yt', 'cc');
+      if (PREF.vol !== 100) { post(S.f, S.kind, 'vol', PREF.vol); S.vol = PREF.vol; }
+      if (PREF.muted) { post(S.f, S.kind, 'mute'); S.muted = true; }
+    }
+    if (st !== S.st) {
+      if (st === 1) { S.since = now; if (!S.on && S.kind === 'yt') post(S.f, 'yt', 'cc'); }
+      S.st = st;
+    }
+    if (st === 1 || st === 3) { S.on = true; if (S.t < S.d - 1) S.end = false; }   // ya arrancó: desde ahora se maneja con los de encima
+    if (st === 0) {                                    // terminó (si no se llegó a frenar antes)
+      if (S === RP) { post(S.f, S.kind, 'seek', 0); post(S.f, S.kind, 'play'); S.st = 1; S.t = 0; S.at = now; }   // el vertical vuelve a empezar
+      else { S.end = true; S.t = S.d; }
+    }
+    nearEnd(S);
+    paint(S);
   });
-  // los controles de encima: el ícono de play o pausa y cuánto va; en pausa quedan a la vista
-  function paintPc(box, S) {
-    var b = box.querySelector('.pc-pp'), bar = box.querySelector('.pc-bar'), on = sounds(S);
-    if (b && b.dataset.on !== String(on)) { b.dataset.on = on; b.innerHTML = on ? MINI_ICON.pause : MINI_ICON.play; b.setAttribute('aria-label', on ? 'Pausar' : 'Reproducir'); }
-    if (bar) { bar.hidden = !S.d; bar.firstChild.style.width = S.d ? Math.min(100, 100 * S.t / S.d).toFixed(2) + '%' : '0'; }
-    return on;
+  // justo antes del final: el horizontal se frena (queda su último cuadro y el botón de volver a verlo, sin la
+  // pantalla final de YouTube) y el vertical vuelve a empezar, como en Shorts
+  function nearEnd(S) {
+    if (!S.f || S.st !== 1 || !S.d || S.d < 2 || S.drag != null) return;
+    var t = tNow(S);
+    if (t < endOf(S) - .45) { S.lp = 0; return; }
+    if (S.lp) return;
+    S.lp = 1;
+    if (S === RP) { post(S.f, S.kind, 'seek', 0); S.t = 0; S.at = performance.now(); }
+    else { post(S.f, S.kind, 'pause'); S.t = t; S.at = performance.now(); S.st = 2; S.end = true; paint(S); }
   }
-  var WC = 0, RC = 0;
-  function wCtl(on) {                                 // los del horizontal, en el celular
-    var st = $('#w-stage'); clearTimeout(WC); st.classList.toggle('ctl', on);
-    if (on && sounds(YT)) WC = setTimeout(function () { st.classList.remove('ctl'); }, 3000);
+  // mientras suena, la barrita y el tiempo se mueven cuadro a cuadro
+  var LOOP = 0;
+  function tick() {
+    LOOP = 0;
+    var go = false;
+    [YT, RP].forEach(function (S) {                   // solo el segundo que se lee (la barrita anda sola)
+      if (!S.f || S.st !== 1) return;
+      go = true; nearEnd(S);
+      var box = S === YT ? $('#w-stage .vp') : null, cur = box && box.querySelector('.vp-cur'), s = Math.floor(tNow(S));
+      if (cur && cur._s !== s) { cur._s = s; cur.textContent = clock(s); }
+    });
+    if (go) LOOP = requestAnimationFrame(tick);
   }
-  var clock = function (x) { x = Math.max(0, Math.floor(x || 0)); var h = Math.floor(x / 3600), m = Math.floor(x % 3600 / 60), k = x % 60; return (h ? h + ':' + (m < 10 ? '0' : '') : '') + m + ':' + (k < 10 ? '0' : '') + k; };
-  function paintWatch() {
-    var st = $('#w-stage'); st.classList.toggle('live', YT.on); if (YT.on) st.classList.remove('yield');
-    st.classList.toggle('paused', YT.on && !sounds(YT));
-    $('#w-time').textContent = YT.d ? clock(YT.t) + ' / ' + clock(YT.d) : '';
-    if (!paintPc(st, YT) && YT.on && stacked() && !isMini()) st.classList.add('ctl');
+  var vpOf = function (S) { if (S === YT) return $('#w-stage .vp'); var it = SH.items[SH.i]; return it ? it.querySelector('.vp') : null; };
+  function paint(S) {
+    var box = vpOf(S);
+    if (box) paintBox(box, S);
+    if (S === YT) { paintStage(); paintMini(); } else paintReel();
+    if (S.st === 1 && !LOOP) LOOP = requestAnimationFrame(tick);
+  }
+  function paintBox(box, S) {                         // el play o la pausa (o volver a ver), el volumen y la barrita
+    var on = sounds(S) && !S.end, lv = S.on || (S.kind === 'tt' && !!S.f), c = box.classList;
+    c.toggle('v-live', lv); c.toggle('v-play', lv && on); c.toggle('v-paused', lv && !on); c.toggle('v-end', lv && S.end);
+    c.toggle('v-muted', S.muted || !S.vol);
+    var k = S.end ? 'replay' : on ? 'pause' : 'play';
+    if (box._k !== k) { box._k = k; [].forEach.call(box.querySelectorAll('.vp-pp, .vp-big'), function (b) { b.innerHTML = ICO[k]; b.setAttribute('aria-label', LBL[k]); }); }
+    var vk = S.muted || !S.vol ? 'mute' : S.vol < 50 ? 'low' : 'vol', mb = box.querySelector('.vp-mute');
+    if (mb && box._v !== vk) { box._v = vk; mb.innerHTML = ICO[vk]; mb.setAttribute('aria-label', vk === 'mute' ? 'Activar el sonido (m)' : 'Silenciar (m)'); }
+    [].forEach.call(box.querySelectorAll('.vp-vs'), function (vs) { var vv = Math.round(S.muted ? 0 : S.vol); if (vs._v !== vv) { vs._v = vv; vs.style.setProperty('--v', String(vv / 100)); vs.setAttribute('aria-valuenow', String(vv)); } });
+    paintTime(S, box);
+  }
+  function paintTime(S, box) {                       // el tiempo, lo que cargó y la barrita (que la mueve el navegador solo)
+    box = box || vpOf(S);
+    var t = S.drag != null ? S.drag : tNow(S);
+    if (box) {
+      var cur = box.querySelector('.vp-cur'), len = box.querySelector('.vp-len'), s = Math.floor(t), ds = Math.floor(S.d || 0), dd = !!S.d, bf = Math.round(Math.max(0, S.buf || 0) * 50) / 50;
+      if (cur && cur._s !== s) { cur._s = s; cur.textContent = clock(t); }
+      if (len && len._s !== ds) { len._s = ds; len.textContent = clock(S.d); }
+      if (box._d !== dd) { box._d = dd; box.classList.toggle('v-dur', dd); }
+      if (box._b !== bf) { box._b = bf; box.style.setProperty('--b', String(bf)); }
+    }
+    if (S.drag != null) barSync(S, box); else barMaybe(S, box);
+  }
+  // La barrita la mueve el navegador solo: una animación desde donde va hasta el final, que se vuelve a armar solo
+  // cuando cambia algo (play, pausa, ir a otro momento) o si se desfasa. Así la página no se toca en cada cuadro
+  // (si no, en el celular los verticales no se podían deslizar mientras sonaban)
+  function barSync(S, box) {
+    var t = S.drag != null ? S.drag : tNow(S), p = S.d ? Math.max(0, Math.min(1, t / S.d)) : 0;
+    var run = S.drag == null && S.st === 1 && S.d > 0, left = run ? Math.max(0, (S.d - t) / (S.rate || 1)) * 1000 : 0, mini = S === YT && isMini();
+    var els = box ? [[box.querySelector('.vp-fill'), 0], [box.querySelector('.vp-knob'), 1]] : [];
+    if (mini) els.push([$('#mi-fill'), 0]);
+    els.forEach(function (x) {
+      var el = x[0], f = function (v) { return x[1] ? 'translateX(' + (v * 100).toFixed(2) + '%)' : 'scaleX(' + v.toFixed(4) + ')'; };
+      if (!el) return;
+      if (el._a) { el._a.cancel(); el._a = null; }
+      el.style.transform = f(p);
+      if (run && left > 60 && el.animate) el._a = el.animate([{ transform: f(p) }, { transform: f(1) }], { duration: left, easing: 'linear', fill: 'forwards' });
+    });
+    S.sync = { t: t, at: performance.now(), run: run, d: S.d, box: box, mini: mini };
+  }
+  function vpReset(vp) {                             // los controles de un video que se va, como nuevos (y el mini, su barrita)
+    if (!vp) return;
+    vp.classList.remove('v-ui', 'v-live', 'v-play', 'v-paused', 'v-end', 'v-muted', 'v-dur', 'v-scrub');
+    vp._k = vp._v = vp._d = vp._b = null;
+    [].forEach.call(vp.querySelectorAll('.vp-fill, .vp-knob, #mi-fill'), function (el) { if (el._a) { el._a.cancel(); el._a = null; } el.style.transform = ''; });
+  }
+  function barMaybe(S, box) {
+    var c = S.sync, run = S.drag == null && S.st === 1 && S.d > 0;
+    if (c && c.run === run && c.d === S.d && c.box === box && c.mini === (S === YT && isMini())) {
+      var exp = c.run ? c.t + (performance.now() - c.at) / 1000 * (S.rate || 1) : c.t;
+      if (Math.abs(exp - tNow(S)) < .4) return;      // va bien: no se toca
+    }
+    barSync(S, box);
+  }
+  function paintStage() {
+    var st = $('#w-stage'), on = YT.on && sounds(YT) && !YT.end;
+    st.classList.toggle('live', YT.on); if (YT.on) st.classList.remove('yield');
+    st.classList.toggle('fin', !!YT.f && YT.st === 0);  // terminó del todo: YouTube muestra su pantalla final, así que va la miniatura
+    if (YT.on && YT.was && !on && !isMini()) ui(true, true);   // al pausar (o al terminar), los controles aparecen y quedan
+    else if (on && !YT.was && !isMini()) ui(true);   // arranca o sigue: a la vista con el ícono de pausa de YouTube y se van con él
+    YT.was = on;
   }
   function paintReel() {
     var it = SH.items[SH.i], v = it && it.querySelector('.sh-v');
-    if (!it) return;
-    v.classList.toggle('live', RP.on || (RP.kind === 'tt' && !!RP.f));   // TikTok quizás no avisa: va igual
-    paintPc(it, RP);                                     // la pausa o el play del medio y la barrita
-    v.classList.toggle('paused', RP.on && !sounds(RP));  // en pausa, la miniatura en vez de la pantalla de pausa de YouTube
+    if (!v) return;
+    var lv = RP.on || (RP.kind === 'tt' && !!RP.f);
+    v.classList.toggle('live', lv); if (lv) v.classList.remove('yield');
   }
+  // los controles del horizontal, a la vista o no. Sonando, se van solos (con el mouse, si no está sobre la barra de abajo)
+  var UIT = 0;
+  function ui(on, keep) {
+    var vp = $('#w-stage .vp');
+    if (!vp) return;
+    clearTimeout(UIT);
+    vp.classList.toggle('v-ui', !!on);
+    if (on && !keep && sounds(YT) && !YT.end) UIT = setTimeout(function hide() {
+      if (YT.drag != null || vp.querySelector('.vp-bot:hover, .vp-vol.on')) { UIT = setTimeout(hide, 800); return; }
+      if (sounds(YT) && !YT.end) vp.classList.remove('v-ui');
+    }, Math.max(fine() ? 2500 : 3000, YT.since + 5200 - performance.now()));   // recién arrancó: junto con el ícono de YouTube
+  }
+  // Al arrancar o seguir, YouTube muestra unos segundos su propio ícono de pausa en el medio (no se puede sacar desde
+  // afuera): ese es el único del medio. Los nuestros no van ahí mientras suena (solo el play, en pausa) y los
+  // controles se van junto con ese ícono
+  function wToggle() {                               // play o pausa del horizontal
+    if (!YT.f) return;
+    pCmd(YT, sounds(YT) && !YT.end ? 'pause' : 'play');
+  }
+  function wSeek(dt, abs) {                          // dt segundos para adelante o para atrás (o al segundo abs)
+    if (!YT.f || !YT.d) return;
+    pCmd(YT, 'seek', Math.max(0, Math.min(endOf(YT) - .6, abs != null ? abs : tNow(YT) + dt)));
+  }
+  function wNext() { var n = $('#w-list [data-watch]'); if (n) openWatch(n.dataset.watch); }   // el siguiente: el primero de la lista
+  function vMute(S) {                                // silencio, o el sonido de vuelta
+    if (!S.f) return;
+    if (S.muted || !S.vol) { pCmd(S, 'unmute'); if (!S.vol) pCmd(S, 'vol', 50); } else pCmd(S, 'mute');
+    savePref(S);
+  }
+  function vSet(S, v) {
+    v = Math.round(Math.max(0, Math.min(100, v)));
+    pCmd(S, 'vol', v);
+    if (v && S.muted) pCmd(S, 'unmute'); else if (!v && !S.muted) pCmd(S, 'mute');
+    savePref(S);
+  }
+  // pantalla completa, con los controles nuestros (en el celular, además, acostado; en el iPhone no se puede)
+  var fsEl = function () { return document.fullscreenElement || document.webkitFullscreenElement; };
+  var canFs = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  function fsExit() { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) {} }
+  function fsToggle() {
+    var st = $('#w-stage');
+    if (fsEl()) return fsExit();
+    if (!canFs) return;
+    try {
+      var r = (st.requestFullscreen || st.webkitRequestFullscreen).call(st);
+      if (r && r.then && !fine() && screen.orientation && screen.orientation.lock) r.then(function () { return screen.orientation.lock('landscape'); }).catch(function () {});
+    } catch (e) {}
+  }
+  ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (n) {
+    document.addEventListener(n, function () {
+      var on = fsEl() === $('#w-stage'), b = $('#w-stage .vp-fs');
+      if (b) { b.innerHTML = on ? ICO.fsx : ICO.fs; b.setAttribute('aria-label', on ? 'Salir de pantalla completa (f)' : 'Pantalla completa (f)'); }
+      if (!on) try { screen.orientation.unlock(); } catch (e) {}
+      if (YT.on) ui(true);
+    });
+  });
+  // ir a otro momento: tocando o arrastrando la barrita (mientras se arrastra, el video va mostrando por dónde pasa)
+  document.addEventListener('pointerdown', function (e) {
+    var bar = e.target.closest && e.target.closest('.vp-bar');
+    if (!bar || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    var box = bar.closest('.vp'), S = box.closest('#w-stage') ? YT : RP;
+    if (!S.f || !S.d) return;
+    e.preventDefault(); e.stopPropagation();
+    var ls = 0, at = function (x) { var r = bar.getBoundingClientRect(); return Math.min(endOf(S) - .6, Math.max(0, Math.min(1, (x - r.left) / Math.max(1, r.width))) * S.d); };
+    var go = function (x) {
+      S.drag = at(x); box.classList.add('v-scrub');
+      bar.style.setProperty('--h', (S.drag / S.d).toFixed(4)); bar.querySelector('.vp-tip').textContent = clock(S.drag);
+      paintTime(S, box);
+      var now = performance.now(); if (now - ls > 140) { ls = now; post(S.f, S.kind, 'seek', S.drag, false); }
+    };
+    go(e.clientX);
+    if (S === YT) ui(true, true);
+    try { bar.setPointerCapture(e.pointerId); } catch (x) {}
+    var mv = function (ev) { go(ev.clientX); }, up = function () {
+      bar.removeEventListener('pointermove', mv); bar.removeEventListener('pointerup', up); bar.removeEventListener('pointercancel', up);
+      var v = S.drag; S.drag = null; box.classList.remove('v-scrub');
+      if (v != null && S.f) pCmd(S, 'seek', v, true);
+      if (S === YT) ui(true);
+    };
+    bar.addEventListener('pointermove', mv); bar.addEventListener('pointerup', up); bar.addEventListener('pointercancel', up);
+  }, true);
+  // con el mouse sobre la barrita: el segundo de ese punto, en un cartel
+  document.addEventListener('pointermove', function (e) {
+    if (e.pointerType !== 'mouse') return;
+    var bar = e.target.closest && e.target.closest('.vp-bar');
+    if (!bar) return;
+    var box = bar.closest('.vp'), S = box.closest('#w-stage') ? YT : RP;
+    if (!S.d || S.drag != null) return;
+    var r = bar.getBoundingClientRect(), x = Math.max(0, Math.min(1, (e.clientX - r.left) / Math.max(1, r.width)));
+    bar.style.setProperty('--h', x.toFixed(4)); bar.querySelector('.vp-tip').textContent = clock(x * S.d);
+  }, { passive: true });
+  // el volumen: el botón silencia y, al lado, la barrita del volumen (con el mouse encima se despliega)
+  document.addEventListener('pointerdown', function (e) {
+    var vs = e.target.closest && e.target.closest('.vp-vs');
+    if (!vs || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    var box = vs.closest('.vp'), S = box.closest('#w-stage') ? YT : RP, vol = vs.closest('.vp-vol');
+    if (!S.f) return;
+    e.preventDefault(); e.stopPropagation();
+    var at = function (x) { var r = vs.getBoundingClientRect(); return (x - r.left - 6) / Math.max(1, r.width - 12) * 100; };
+    vol.classList.add('on'); vSet(S, at(e.clientX));
+    try { vs.setPointerCapture(e.pointerId); } catch (x) {}
+    var mv = function (ev) { vSet(S, at(ev.clientX)); }, up = function () {
+      vs.removeEventListener('pointermove', mv); vs.removeEventListener('pointerup', up); vs.removeEventListener('pointercancel', up);
+      vol.classList.remove('on');
+    };
+    vs.addEventListener('pointermove', mv); vs.addEventListener('pointerup', up); vs.addEventListener('pointercancel', up);
+  }, true);
+  // las teclas de YouTube, con el reproductor grande abierto
+  document.addEventListener('keydown', function (e) {
+    if (!WD.open || isMini() || !YT.f || e.altKey || e.ctrlKey || e.metaKey) return;
+    var tg = e.target, k = e.key, done = true;
+    if (tg.closest && tg.closest('input, textarea, select, [contenteditable]')) return;
+    if ((k === ' ' || k === 'Enter') && tg.closest && tg.closest('button, a')) return;   // un botón con el foco: lo aprieta
+    if (k === ' ' || k === 'k' || k === 'K') wToggle(true);
+    else if (k === 'j' || k === 'J') wSeek(-10);
+    else if (k === 'l' || k === 'L') wSeek(10);
+    else if (k === 'ArrowLeft') wSeek(-5);
+    else if (k === 'ArrowRight') wSeek(5);
+    else if (k === 'm' || k === 'M') vMute(YT);
+    else if ((k === 'f' || k === 'F') && canFs) fsToggle();
+    else if (k === 'Home') wSeek(0, 0);
+    else if (k === 'End' && YT.d) { wSeek(0, endOf(YT)); pCmd(YT, 'pause'); YT.end = true; paint(YT); }   // al final: el último cuadro, para volver a verlo
+    else if (/^[0-9]$/.test(k) && YT.d) wSeek(0, YT.d * +k / 10);
+    else done = false;
+    if (done) { e.preventDefault(); if (YT.on) ui(true); }
+  });
+
   // Los verticales se precargan: el de abajo y el de arriba ya tienen el reproductor cargado (escondido y sin
   // sonar), así al pasar arrancan al instante. El que se va queda en pausa por si volvés; los más lejos se descargan.
   var reelFrame = function (it) { return it && it.querySelector('.sh-v iframe'); };
@@ -867,14 +1141,19 @@
     if (!f) return;
     post(f, kindOf(f), 'pause');
     if (RP.f === f) pReset(RP);
-    f.classList.add('pre'); v.classList.remove('playing', 'live');
+    f.classList.add('pre'); v.classList.remove('playing', 'live', 'yield');
     var pb = v.querySelector('.play'); if (pb) pb.hidden = false;
+    vpReset(v.querySelector('.vp'));
   }
   function reelGo(it) {                               // el que queda en pantalla: suena (el precargado, al instante)
     var w = byId[it.dataset.short], v = it.querySelector('.sh-v'), pb = v.querySelector('.play'), f = reelFrame(it);
-    if (!f) { if (LIVE && pb && w && embedOf(w)) { playHere(pb, v, w); reelHook(it); } return; }
+    if (!f) { if (LIVE && pb && w && embedOf(w)) { playHere(pb, v, w); reelHook(it); reelWait(v); } return; }
     f.classList.remove('pre'); v.classList.add('playing'); if (pb) pb.hidden = true;
-    reelHook(it); pStart(RP);
+    reelHook(it); pStart(RP); reelWait(v);
+  }
+  function reelWait(v) {                              // si no arranca solo (el navegador no lo dejó), queda a la vista el play de YouTube
+    var f = v.querySelector('iframe');
+    clearTimeout(v._y); v._y = setTimeout(function () { if (f && RP.f === f && !RP.on) v.classList.add('yield'); }, 2500);
   }
   function closeDesc(it) {                            // la descripción del vertical, cerrada otra vez
     var inf = it.querySelector('.sh-info.open'), mb = it.querySelector('.sh-more');
@@ -884,40 +1163,41 @@
   function reelHook(it) {                             // el vertical que arrancó: a escuchar su reproductor
     var w = byId[it.dataset.short], f = it.querySelector('.sh-v iframe');
     if (f && w) pHook(RP, f, w.yt ? 'yt' : w.tt ? 'tt' : '');
-    paintReel();
+    paint(RP);
   }
-  // ir a otro momento: tocando o arrastrando la barrita
-  document.addEventListener('pointerdown', function (e) {
-    var bar = e.target.closest && e.target.closest('.pc-bar');
-    if (!bar) return;
-    var S = bar.closest('#w-stage') ? YT : RP;
-    if (!S.f || !S.d) return;
-    e.preventDefault(); e.stopPropagation();
-    var go = function (x) {
-      var r = bar.getBoundingClientRect();
-      pCmd(S, 'seek', Math.max(0, Math.min(1, (x - r.left) / Math.max(1, r.width))) * S.d);
-      if (S === YT) { paintWatch(); wCtl(true); } else paintReel();
-    };
-    go(e.clientX);
-    try { bar.setPointerCapture(e.pointerId); } catch (x) {}
-    var mv = function (ev) { go(ev.clientX); }, up = function () { bar.removeEventListener('pointermove', mv); bar.removeEventListener('pointerup', up); bar.removeEventListener('pointercancel', up); };
-    bar.addEventListener('pointermove', mv); bar.addEventListener('pointerup', up); bar.addEventListener('pointercancel', up);
-  }, true);
-  $('#w-pp').addEventListener('click', function () { pCmd(YT, sounds(YT) ? 'pause' : 'play'); paintWatch(); wCtl(true); });
-  // pantalla completa (donde se puede: en el iPhone, no)
-  var fsEl = function () { return document.fullscreenElement || document.webkitFullscreenElement; };
-  $('#w-fs').hidden = !(document.fullscreenEnabled || document.webkitFullscreenEnabled);
-  $('#w-fs').addEventListener('click', function () {
-    var st = $('#w-stage');
-    try {
-      if (fsEl()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-      else {
-        var r = (st.requestFullscreen || st.webkitRequestFullscreen).call(st);
-        if (r && r.then && screen.orientation && screen.orientation.lock) r.then(function () { return screen.orientation.lock('landscape'); }).catch(function () {});
-      }
-    } catch (e) {}
-    wCtl(true);
-  });
+  // un toque en el vertical, como en Shorts: pausa o sigue (en la compu, con el ícono que aparece y se va) y,
+  // en el celular, dos toques seguidos es un me gusta, con un corazón donde tocaste. Con la descripción abierta,
+  // el toque la cierra
+  var RT = { t: 0, like: 0, timer: 0 };
+  function reelToggle() {
+    var it = SH.items[SH.i];
+    if (!it || !RP.f) return;
+    pCmd(RP, sounds(RP) ? 'pause' : 'play');
+  }
+  function reelTap(it, e) {
+    if (it.querySelector('.sh-info.open')) return closeDesc(it);
+    if (!RP.on) return pCmd(RP, 'play');
+    if (fine()) return reelToggle();
+    var now = performance.now();
+    if (now - RT.t < 300 || now - RT.like < 600) { clearTimeout(RT.timer); RT.t = 0; RT.like = now; return heartAt(it, e.clientX, e.clientY); }
+    RT.t = now;
+    clearTimeout(RT.timer); RT.timer = setTimeout(function () { RT.t = 0; if (SH.items[SH.i] === it) reelToggle(); }, 280);
+  }
+  function heartAt(it, x, y) {
+    blip();
+    var lb = it.querySelector('.sh-act [data-like] svg');
+    if (still()) return;
+    if (lb && lb.animate) lb.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.3)' }, { transform: 'scale(1)' }], { duration: 300, easing: EASE });
+    var h = document.createElement('span'), sz = 92, rot = Math.random() * 30 - 15;
+    h.className = 'heart-fly'; h.innerHTML = HEART;
+    h.style.cssText = 'left:' + (x - sz / 2) + 'px;top:' + (y - sz / 2) + 'px;width:' + sz + 'px;height:' + sz + 'px;color:#9272F0;filter:drop-shadow(0 4px 12px rgba(0,0,0,.45))';
+    (it.closest('dialog') || document.body).appendChild(h);
+    var r = function (s, ty) { return 'translateY(' + ty + 'px) scale(' + s + ') rotate(' + rot.toFixed(1) + 'deg)'; };
+    h.animate([{ transform: r(.3, 0), opacity: 0 }, { transform: r(1.15, 0), opacity: 1, offset: .22 }, { transform: r(.95, 0), opacity: 1, offset: .45 }, { transform: r(1.25, -70), opacity: 0 }],
+      { duration: 900, easing: 'cubic-bezier(.25, .6, .35, 1)', fill: 'both' }).finished.then(function () { h.remove(); }, function () { h.remove(); });
+  }
+
+  // el mini reproductor, en la compu: se mueve arrastrándolo y queda en la esquina más cercana
   var MI = { c: 'br', drag: null, moved: false, swallow: false };
   try { MI.c = localStorage.getItem('portfolio-mini') || 'br'; } catch (e) {}
   function miCorner(c) { ['tl', 'tr', 'bl', 'br'].forEach(function (k) { WD.classList.toggle('c-' + k, k === c); }); }
@@ -950,27 +1230,65 @@
     MI.c = c; try { localStorage.setItem('portfolio-mini', c); } catch (x) {}
   }
   window.addEventListener('pointerup', miDrop); window.addEventListener('pointercancel', miDrop);
-  // En el celular, el video se baja con el dedo para achicarlo (como en la app de YouTube): agarrándolo de arriba
-  // (encima del reproductor YouTube se queda con los toques: arriba va una franja con una rayita) o tirando
-  // para abajo lo de abajo del video cuando está arriba de todo. Si se suelta antes, vuelve a su lugar.
-  // En el celular, el horizontal se arrastra para abajo desde cualquier parte del video y se achica (si suena)
-  // o se cierra, como en la app de YouTube; si se suelta antes, vuelve. Un toque muestra los controles.
+  // el mini, en el celular: se baja con el dedo para cerrarlo, como en la app
   (function () {
-    var tap = $('#w-stage .w-tap'), panel = $('#dlgWatch .panel'), g = null;
-    tap.addEventListener('pointerdown', function (e) {
-      if (isMini() || (e.pointerType === 'mouse' && e.button !== 0)) return;
-      g = { id: e.pointerId, x: e.clientX, y: e.clientY, dy: 0, on: false };
-      try { tap.setPointerCapture(e.pointerId); } catch (x) {}
+    var p = $('#dlgWatch .panel'), g = null;
+    p.addEventListener('pointerdown', function (e) { if (isMini() && stacked() && !e.target.closest('.mi-b')) g = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false, dy: 0 }; });
+    p.addEventListener('pointermove', function (e) {
+      if (!g || e.pointerId !== g.id) return;
+      var dx = e.clientX - g.x, dy = e.clientY - g.y;
+      if (!g.on) { if (dy < 8 || Math.abs(dx) > dy) return; g.on = true; try { p.setPointerCapture(e.pointerId); } catch (x) {} }
+      g.dy = Math.max(0, dy); p.style.transform = 'translateY(' + g.dy.toFixed(1) + 'px)'; p.style.opacity = String(Math.max(.25, 1 - g.dy / 140));
     });
-    // Suave mientras suena: el dedo solo mueve la ventana (nada de transparencias encima del video), una vez por
-    // cuadro; al soltar, la ventana sigue hasta el lugar del mini reproductor achicándose (o se va para abajo) y
-    // recién ahí cambia, con el video ya chico donde va a quedar
-    tap.addEventListener('pointermove', function (e) {
+    function up() {
+      var k = g; g = null;
+      if (!k || !k.on) return;
+      MI.swallow = true; setTimeout(function () { MI.swallow = false; });   // el clic de soltar no lo agranda
+      var clear = function () { p.style.transform = ''; p.style.opacity = ''; };
+      if (k.dy < 36) return clear();
+      if (still()) { clear(); return WD.close(); }
+      p.animate([{ transform: 'translateY(' + k.dy + 'px)', opacity: p.style.opacity }, { transform: 'translateY(110%)', opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' })
+        .finished.then(function (an) { WD.close(); clear(); an.cancel(); }, clear);
+    }
+    p.addEventListener('pointerup', up); p.addEventListener('pointercancel', up);
+  })();
+
+  // los controles, sobre el video horizontal. En el celular, además, se arrastra para abajo desde cualquier parte
+  // del video y se achica (si suena) o se cierra, como en la app de YouTube; si se suelta antes, vuelve
+  (function () {
+    var stage = $('#w-stage'), panel = $('#dlgWatch .panel');
+    stage.insertAdjacentHTML('beforeend', vpHTML(false));
+    var vp = stage.querySelector('.vp'), g = null, last = null, sk = null, shown = 0;
+    if (!canFs) vp.querySelector('.vp-fs').hidden = true;
+    vp.addEventListener('click', function (e) {
+      var b = e.target.closest('button');
+      if (!b || performance.now() - shown < 450) return;   // el toque que recién los mostró no aprieta el botón que apareció debajo
+      if (b.matches('.vp-big, .vp-pp')) { wToggle(); ui(true); }
+      else if (b.matches('.vp-next')) wNext();
+      else if (b.matches('.vp-mute')) { vMute(YT); ui(true); }
+      else if (b.matches('.vp-fs')) fsToggle();
+    });
+    // con el mouse: al moverlo aparecen; al salir, si está sonando, se van
+    stage.addEventListener('pointermove', function (e) { if (e.pointerType === 'mouse' && YT.on && !isMini() && !(g && g.on)) ui(true); });
+    stage.addEventListener('pointerleave', function (e) {
+      if (e.pointerType !== 'mouse' || YT.drag != null || !sounds(YT) || YT.end) return;
+      clearTimeout(UIT); UIT = setTimeout(function () { if (sounds(YT) && !YT.end && YT.drag == null) vp.classList.remove('v-ui'); }, Math.max(400, YT.since + 5200 - performance.now()));   // recién arrancó: junto con el ícono de YouTube
+    });
+    // desde cualquier parte del video, también desde sus botones (tocándolos sin arrastrar, se aprietan)
+    vp.addEventListener('pointerdown', function (e) {
+      if (isMini() || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      g = { id: e.pointerId, x: e.clientX, y: e.clientY, dy: 0, on: false, up: false, mouse: e.pointerType === 'mouse', btn: !!e.target.closest('button') };
+    });
+    // Suave mientras suena: el dedo solo mueve la ventana, una vez por cuadro; al soltar, la ventana sigue hasta el
+    // lugar del mini reproductor achicándose (o se va para abajo) y recién ahí cambia, con el video ya chico
+    vp.addEventListener('pointermove', function (e) {
       if (!g || e.pointerId !== g.id) return;
       var dx = e.clientX - g.x, dy = e.clientY - g.y;
       if (!g.on) {
-        if (dy < 10 || Math.abs(dx) > dy) return;
-        g.on = true; $('#w-stage').classList.remove('ctl'); panel.style.willChange = 'transform';
+        if (!stacked() || Math.abs(dy) < 10 || Math.abs(dx) > Math.abs(dy)) return;
+        if (dy < 0) { g.up = dy < -40; return; }       // para arriba: pantalla completa, al soltar
+        g.on = true; ui(false); panel.style.willChange = 'transform';
+        try { vp.setPointerCapture(e.pointerId); } catch (x) {}
         panel.getAnimations().forEach(function (x) { x.cancel(); });
       }
       g.dy = Math.max(0, dy);
@@ -983,15 +1301,42 @@
       var mini = sounding();
       if (still()) { clear(); return closeWatch(); }
       panel.style.transform = 'translateY(' + dy + 'px)';
-      var p = panel.getBoundingClientRect(), st = $('#w-stage').getBoundingClientRect(), ox = st.left - p.left, oy = st.top - p.top, to;
+      var p = panel.getBoundingClientRect(), st = stage.getBoundingClientRect(), ox = st.left - p.left, oy = st.top - p.top, to;
       if (mini) {                                       // el video va justo al lugar del video del mini
         var H = 64, ty = innerHeight - envPx('safe-area-inset-bottom') - H;
         to = 'translate(' + (-(p.left + ox)).toFixed(1) + 'px,' + (ty - (p.top - dy + oy)).toFixed(1) + 'px) scale(' + (H * 16 / 9 / st.width).toFixed(4) + ')';
       } else to = 'translateY(' + (innerHeight - p.top + dy).toFixed(1) + 'px)';
       panel.style.transformOrigin = ox.toFixed(1) + 'px ' + oy.toFixed(1) + 'px';
       var an = panel.animate([{ transform: 'translateY(' + dy + 'px)' }, { transform: to }], { duration: mini ? 300 : 220, easing: 'cubic-bezier(.2, .8, .2, 1)', fill: 'forwards' });
-      var fin = function () { an.cancel(); clear(); closeWatch(); };
-      an.finished.then(fin, function () {});
+      an.finished.then(function () { an.cancel(); clear(); closeWatch(); }, function () {});
+    }
+    function ripple(side, n) {                        // dos toques a un costado: cuántos segundos saltó, como en la app
+      var el = vp.querySelector('.vp-sk.' + (side < 0 ? 'l' : 'r'));
+      el.querySelector('b').textContent = n + ' segundos';
+      el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
+      clearTimeout(el._t); el._t = setTimeout(function () { el.classList.remove('on'); }, 650);
+    }
+    function tapped(e, k) {
+      var now = performance.now();
+      if (!YT.on) return pCmd(YT, 'play');            // todavía no arrancó: que arranque
+      if (k.mouse) {                                  // con el mouse: un clic pausa o sigue y dos clics, pantalla completa
+        if (last && now - last.t < 320) { last = null; wToggle(); return fsToggle(); }
+        last = { t: now };
+        wToggle(); return ui(true);
+      }
+      var r = stage.getBoundingClientRect(), x = (e.clientX - r.left) / Math.max(1, r.width), y = (e.clientY - r.top) / Math.max(1, r.height), side = x < .35 ? -1 : x > .65 ? 1 : 0;
+      if (!side && Math.abs(y - .5) < .25 && sounds(YT) && !YT.end) { last = sk = null; shown = now; wToggle(); return ui(true, true); }   // en el medio, sonando: la pausa (donde está la de YouTube)
+      var again = sk && sk.side === side && now - sk.t < 700;
+      if (side && (again || (last && last.side === side && now - last.t < 320))) {   // dos toques a un costado: 10 segundos (y cada toque más, otros 10)
+        if (!again) { if (last) vp.classList.toggle('v-ui', last.ui); clearTimeout(UIT); sk = { side: side, n: 0 }; }   // el primer toque no cuenta
+        sk.n += 10; sk.t = now; last = null;
+        wSeek(side * 10); ripple(side, sk.n);
+        return;
+      }
+      sk = null;
+      last = { t: now, side: side, ui: vp.classList.contains('v-ui') };
+      if (!last.ui) shown = now;
+      ui(!last.ui);
     }
     function up(e) {
       var k = g; g = null;
@@ -999,23 +1344,21 @@
       if (k.raf) cancelAnimationFrame(k.raf);
       if (!k.on) {
         if (e.type !== 'pointerup') return;
-        if (!YT.on) {                                     // todavía no arrancó: que arranque; si no lo dejan (pasa en el iPhone),
-          pCmd(YT, 'play');                               // la capa se corre para que se toque el play de YouTube
-          return setTimeout(function () { if (YT.f && !YT.on) $('#w-stage').classList.add('yield'); }, 700);
-        }
-        if (ytPaused(YT)) { pCmd(YT, 'play'); paintWatch(); return wCtl(true); }   // en pausa, el toque lo hace seguir
-        return wCtl(!$('#w-stage').classList.contains('ctl'));
+        if (k.up && !fsEl()) { if (YT.on) ui(false); return fsToggle(); }   // deslizando para arriba: pantalla completa
+        if (k.btn || Math.abs(e.clientX - k.x) > 12 || Math.abs(e.clientY - k.y) > 12) return;   // un botón (lo aprieta su clic) o se movió de costado: no es un toque
+        return tapped(e, k);
       }
       if (k.dy > Math.min(140, innerHeight * .2)) {
-        if (fsEl()) { clear(); try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (x) {} return; }   // en pantalla completa, sale de ahí
+        if (fsEl()) { clear(); return fsExit(); }      // en pantalla completa, sale de ahí
         return drop(k.dy);
       }
       clear();
       if (!still()) panel.animate([{ transform: 'translateY(' + k.dy + 'px)' }, { transform: 'none' }], { duration: 220, easing: EASE });
     }
-    tap.addEventListener('pointerup', up); tap.addEventListener('pointercancel', up);
+    vp.addEventListener('pointerup', up); vp.addEventListener('pointercancel', up);
+    vp.addEventListener('dblclick', function (e) { e.preventDefault(); });
   })();
-  WD.addEventListener('cancel', function (e) { if (sounding()) { e.preventDefault(); setTimeout(function () { reopen(true); }); } });   // Esc
+  WD.addEventListener('cancel', function (e) { if (fsEl()) { e.preventDefault(); return; } if (sounding()) { e.preventDefault(); setTimeout(function () { reopen(true); }); } });   // Esc
 
   // ---------------- en la compu, también se scrollea arrastrando, como con el dedo ----------------
   // Con el mouse se agarra la página, el reproductor o su lista y se los desliza para arriba o para abajo;
@@ -1098,9 +1441,9 @@
   // ---------------- V2 · los verticales, como Shorts ----------------
   // Uno por pantalla, en el orden de la fila, con el anterior asomando arriba y el siguiente abajo, más
   // oscuros. Se pasan con la rueda (uno por gesto), el dedo, arrastrando con el mouse, las flechas del
-  // teclado o los botones ↑ ↓, y siempre frena en uno. El play, al centro; al lado, siempre abierta, la
-  // descripción con el título, las views y los likes, y el canal. En el celular, como Shorts: a pantalla
-  // completa, con el canal, el título y la descripción sobre el video y los likes y las views a la derecha.
+  // teclado o los botones ↑ ↓, y siempre frena en uno. Arranca solo; un toque pausa, como en Shorts. Al lado,
+  // siempre abierta, la descripción con el título, las views y los likes, y el canal. En el celular, como
+  // Shorts: el canal, el título y la descripción sobre el video y los likes y las views a la derecha.
   var SH = { d: $('#dlgShorts'), feed: $('#sh-feed'), items: [], i: -1, mt: 0 };
   var SB = ownBar(SH.d, function () { var it = SH.items[SH.i]; return it && it.querySelector('.sh-pan .d-txt'); });   // la barra propia: la descripción
   var ICON = {
@@ -1124,7 +1467,7 @@
       '<button class="play" type="button" aria-label="' + esc('Reproducir “' + w.title + '”') + '"><span>▶</span></button>' +
       '<div class="sh-info">' + who + '<p class="sh-ttl">' + esc(w.title) + '</p>' +
       (text ? '<button class="sh-more" type="button" aria-expanded="false">…más</button><div class="sh-dx">' + text + '</div>' : '') + '</div>' +
-      (w.drive ? '' : '<div class="sh-tap" aria-hidden="true"></div><div class="pc"><button class="pc-pp" type="button" aria-label="Pausar"></button><div class="pc-bar" hidden><i></i></div></div>') + '</div>' +
+      (w.drive ? '' : vpHTML(true)) + '</div>' +
       '<div class="sh-act">' + acts + '</div>' +
       '<aside class="sh-pan" aria-label="Descripción"><h3 class="sd-t">' + esc(w.title) + '</h3><button class="x sd-x" type="button" data-close aria-label="Cerrar">✕</button>' +
       (text ? '<div class="d-txt">' + text + '</div>' : '<div class="nod">Sin descripción.</div>') + (foot ? '<div class="sd-foot">' + foot + '</div>' : '') + '</aside></article>';
@@ -1152,7 +1495,7 @@
     if (n === SH.i) return;
     var prev = SH.items[SH.i];
     if (prev) {                                            // el que se va deja de sonar
-      prev.classList.remove('on', 'ctl', 'clean');
+      prev.classList.remove('on'); clearTimeout(RT.timer);
       reelStop(prev);
       closeDesc(prev);
       var dx = prev.querySelector('.sh-dx'); if (dx) dx.scrollTop = 0;
@@ -1165,11 +1508,12 @@
     SH.items.forEach(function (x, k) { if (Math.abs(k - n) > 1) stopHere(x.querySelector('.sh-v')); });   // los lejos se descargan
     reelPre(SH.items[n + 1]); reelPre(SH.items[n - 1]);  // el de abajo y el de arriba, listos
     var btns = SH.d.querySelectorAll('.sh-nav button');
-    btns[0].disabled = n === 0; btns[1].disabled = n === SH.items.length - 1;
+    btns[0].disabled = n === 0;                          // el de bajar, en el último, cierra
     SB();
   }
   function shGo(n, fast) {
-    n = Math.max(0, Math.min(SH.items.length - 1, n));
+    if (n > SH.items.length - 1 && SH.items.length) return SH.d.close();   // después del último: se cierra y queda la página donde estaba
+    n = Math.max(0, n);
     SH.feed.scrollTo({ top: SH.items[n].offsetTop - SH.mt, behavior: still() || fast ? 'auto' : 'smooth' });
   }
   var shTick = false;
@@ -1178,7 +1522,21 @@
     shTick = true;
     requestAnimationFrame(function () { shTick = false; shActive(shIndex()); });
   }, { passive: true });
-  SH.d.addEventListener('close', function () { if (SH.d.open) return; SH.feed.innerHTML = ''; SH.items = []; SH.i = -1; });   // si ya se volvió a abrir, no se vacía
+  SH.d.addEventListener('close', function () { if (SH.d.open) return; SH.feed.innerHTML = ''; SH.items = []; SH.i = -1; pReset(RP); clearTimeout(RT.timer); });   // si ya se volvió a abrir, no se vacía
+  // con el dedo: en el último, deslizando para arriba (como para ver el siguiente), se cierra
+  (function () {
+    var y0 = null, y1 = 0, end = false;
+    SH.feed.addEventListener('touchstart', function (e) {
+      var f = SH.feed;
+      end = SH.i === SH.items.length - 1 && f.scrollTop >= f.scrollHeight - f.clientHeight - 4;
+      y0 = y1 = e.touches[0].clientY;
+    }, { passive: true });
+    SH.feed.addEventListener('touchmove', function (e) { if (y0 != null) y1 = e.touches[0].clientY; }, { passive: true });
+    SH.feed.addEventListener('touchend', function () {
+      if (y0 != null && end && y1 - y0 < -70 && !SH.d.querySelector('.sh-info.open')) SH.d.close();
+      y0 = null;
+    }, { passive: true });
+  })();
   // la rueda o el trackpad pasan de a uno por gesto, en cualquier parte de la pantalla (como en Shorts)
   var wh = { acc: 0, lock: false, until: 0, idle: 0 };
   SH.d.addEventListener('wheel', function (e) {
@@ -1199,7 +1557,7 @@
   (function () {
     var f = SH.feed, drag = null, moved = false;
     f.addEventListener('pointerdown', function (e) {
-      if (e.pointerType !== 'mouse' || e.button !== 0 || e.target.closest('a, .sh-pan, .sh-dx')) return;
+      if (e.pointerType !== 'mouse' || e.button !== 0 || e.target.closest('a, .sh-pan, .sh-dx, .vp-bar, .vp-top, .vp-big')) return;
       drag = { id: e.pointerId, y: e.clientY, top: f.scrollTop, ly: e.clientY, lt: performance.now(), v: 0, on: false, from: SH.i }; moved = false;
     });
     f.addEventListener('pointermove', function (e) {
@@ -1228,18 +1586,17 @@
   document.addEventListener('keydown', function (e) {
     if (!SH.d.open || e.altKey || e.ctrlKey || e.metaKey) return;
     if (e.target.closest && e.target.closest('.sh-pan')) return;     // en la descripción, las flechas la leen
-    if (/^(ArrowDown|PageDown|j)$/.test(e.key)) { e.preventDefault(); shGo(SH.i + 1); }
-    else if (/^(ArrowUp|PageUp|k)$/.test(e.key)) { e.preventDefault(); shGo(SH.i - 1); }
+    var k = e.key;
+    if (/^(ArrowDown|PageDown)$/.test(k)) { e.preventDefault(); shGo(SH.i + 1); }
+    else if (/^(ArrowUp|PageUp)$/.test(k)) { e.preventDefault(); shGo(SH.i - 1); }
+    else if (k === 'k' || k === 'K' || (k === ' ' && !(e.target.closest && e.target.closest('button, a')))) { e.preventDefault(); reelToggle(); }   // como en YouTube: espacio o K pausa
+    else if (k === 'm' || k === 'M') { e.preventDefault(); vMute(RP); }
   });
 
   document.addEventListener('click', function (e) {
     var t = e.target, el;
     if (MI.swallow) { MI.swallow = false; return; }                // soltando el mini reproductor después de moverlo
-    if (t.closest('#top-t')) { e.preventDefault(); return toEnd(); }  // el título de la barra: hasta abajo de todo o, si ya estás abajo, arriba
-    if ((el = t.closest('a[href^="#"]'))) {
-      var id = el.getAttribute('href').slice(1);
-      if (id === 'top' || document.getElementById(id)) { e.preventDefault(); return goTo(id); }
-    }
+    if (t.closest('#ch-n')) return toEnd();                         // el nombre del canal: hasta abajo de todo o, si ya estás abajo, arriba
     if (t.closest('a[href]')) return;                                 // el canal y el original: se abren aparte
     if ((el = t.closest('.d-more'))) {                                // abre y cierra la descripción
       var open = $('#w-desc').classList.toggle('open');
@@ -1253,19 +1610,14 @@
     if ((el = t.closest('[data-watch]'))) return openWatch(el.dataset.watch, el);   // de la lista del reproductor
     if ((el = t.closest('.sh-it:not(.on)'))) return shGo(SH.items.indexOf(el));     // el de abajo (o arriba): pasa a ese
     if (t.closest('.sh-dx')) return;                                                  // leyendo la descripción: no es play
-    if ((el = t.closest('.sh-it.on .pc-pp'))) { pCmd(RP, sounds(RP) ? 'pause' : 'play'); return paintReel(); }   // el botón del medio
     if ((el = t.closest('.sh-more'))) {                                              // la descripción: se abre y se cierra
       var inf = el.closest('.sh-info'), op = inf.classList.toggle('open');
       el.textContent = op ? 'Mostrar menos' : '…más'; el.setAttribute('aria-expanded', String(op));
       return;
     }
-    if ((el = t.closest('.sh-it.on .sh-tap'))) {                                    // un toque en el video
-      el = el.closest('.sh-it');
-      if (ytPaused(RP)) { pCmd(RP, 'play'); return paintReel(); }                 // en pausa: sigue
-      if (getComputedStyle(el.querySelector('.sh-info')).display === 'none') { pCmd(RP, sounds(RP) ? 'pause' : 'play'); return paintReel(); }   // en la compu, pausa
-      if (el.classList.toggle('clean')) closeDesc(el);                            // en el celular: esconde todo (y la descripción vuelve a cerrarse) o lo muestra
-      return;
-    }
+    if ((el = t.closest('.sh-it.on .vp-tap'))) return reelTap(el.closest('.sh-it'), e);   // un toque en el video
+    if (t.closest('.sh-it.on .vp-big, .sh-it.on .vp-pp')) return reelToggle();         // el play o la pausa
+    if (t.closest('.sh-it.on .vp-mute')) return vMute(RP);                                  // el sonido
     if ((el = t.closest('.sh-v .play'))) return reelGo(el.closest('.sh-it'));
     if ((el = t.closest('[data-sh]'))) return shGo(SH.i + (+el.dataset.sh));
     if ((el = t.closest('[data-work]'))) return openWork(el.dataset.work);
@@ -1276,25 +1628,15 @@
     }
   });
 
-  // el título de la barra: baja hasta el final de la página y, si ya estás abajo de todo, sube al principio
+  // el nombre del canal: baja hasta el final de la página y, si ya estás abajo de todo, sube al principio
   function atEnd() { return PAGE.scrollTop + PAGE.clientHeight >= PAGE.scrollHeight - 8; }
   function toEnd() {
     var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     PAGE.scrollTo({ top: atEnd() ? 0 : PAGE.scrollHeight, behavior: reduce ? 'auto' : 'smooth' });
   }
 
-  // los links de la página: con scroll suave
-  function goTo(id, hash) {
-    var el = id === 'top' ? document.body : document.getElementById(id);
-    var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!el) return;
-    if (id === 'top') PAGE.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
-    else el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-    setHash(hash || id);
-  }
-
   // ---------------- config: la barra de arriba ----------------
-  // El título y, a la derecha, Discord, Instagram y el canal (con el ícono de YouTube), en blanco. Salen de la
+  // Discord, Instagram y el canal (con el ícono de YouTube), en violeta, en el canal cuando es barra. Salen de la
   // config: la pestaña Config de la planilla (la lee js/data.js) o, sin planilla, la de ejemplo de
   // js/config.js. Los íconos son los de cada marca (Font Awesome); si no cargan, va uno de muestra.
   var ICONS = {
@@ -1305,9 +1647,8 @@
   var BRAND = { discord: 'discord', instagram: 'instagram', youtube: 'youtube', tiktok: 'tiktok', twitch: 'twitch', x: 'x-twitter' };   // los íconos de cada marca, de Font Awesome
   ICONS.play = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.8v12.4L18.4 12z" fill="currentColor"/></svg>';
   function loadConfig() { return Promise.resolve(M.config || (window.SITE_CONFIG || {}).mock || {}); }
-  // la barra de arriba: el título y los links, en blanco (el canal, con el ícono de YouTube)
+  // los links de la barra (el canal, con el ícono de YouTube)
   function renderTop(c) {
-    if (c && c.title) $('#top-t').textContent = c.title;
     var links = (c && c.links || []).filter(function (l) { return l && /^https?:\/\//.test(l.url || ''); });
     $('#top-links').innerHTML = links.map(function (l) {
       var b = BRAND[l.id] || (l.id === 'canal' ? 'youtube' : '');
@@ -1325,9 +1666,10 @@
     if (!yt) Object.keys(channels).forEach(function (k) { var sn = channels[k].snippet; if (handle && String(sn.customUrl || '').toLowerCase() === handle.toLowerCase()) yt = channels[k]; });
     var url = 'https://www.youtube.com/' + handle, st = yt && yt.statistics;
     $('#ch-n').textContent = ch.name || (yt && yt.snippet.title) || '';
-    var tn = yt && yt.snippet.thumbnails, yav = tn ? ((tn.high || tn.medium || tn.default || {}).url || '') : '', img = $('#ch-img');
-    img.onerror = function () { if (yav && img.src !== yav) img.src = yav; };   // si la foto de la planilla no carga (un link vencido o privado), va la del canal
-    img.src = ch.photo || yav;
+    var tn = (yt && yt.snippet.thumbnails) || {}, img = $('#ch-img');
+    var srcs = [ch.photo].concat(['high', 'medium', 'default'].map(function (k) { return tn[k] && tn[k].url; })).filter(Boolean), si = 0;
+    img.onerror = function () { if (++si < srcs.length) img.src = srcs[si]; };   // si la foto de la planilla no carga (un link vencido o privado), va la del canal y, si esa tampoco, una más chica
+    img.src = srcs[0] || '';
     $('#ch-av').href = url;
     // los suscriptores, de YouTube (salvo que el canal los esconda); los videos, todos los trabajos de la página
     var subs = st && !st.hiddenSubscriberCount && st.subscriberCount != null ? +st.subscriberCount : null, n = works.length;
@@ -1344,17 +1686,22 @@
     $('#ch-l').hidden = !links.length;
     $('#canal').hidden = !(ch.name || ch.description || yt);
   }
-  loadConfig().then(function (c) { renderTop(c); renderChannel(c); $('#canal').classList.add('in'); });   // aparece suave
-  var badge = document.querySelector('.proto');      // abajo a la izquierda: con datos de ejemplo, o qué no respondió
-  if (badge) {
-    if (M.warn) { badge.textContent = M.warn; badge.classList.add('warn'); }
-    badge.hidden = LIVE && !M.warn;
-  }
+  loadConfig().then(function (c) { renderTop(c); renderChannel(c); $('#canal').classList.add('in'); }).then(function () {   // aparece suave
+    // la pantalla de carga se va con la foto del canal y las miniaturas que se ven ya cargadas (como mucho, 1,5 s más)
+    var imgs = [$('#ch-img')].concat([].slice.call(document.querySelectorAll('#all .thumb img'))).filter(function (im) { return im && im.getAttribute('src') && im.getBoundingClientRect().top < innerHeight; }).slice(0, 7);
+    var left = imgs.length, done = false;
+    var go = function () { if (done) return; done = true; setTimeout(loaded, Math.max(0, 350 - (performance.now() - T0))); };
+    var one = function () { if (--left <= 0) go(); };
+    imgs.forEach(function (im) { if (im.complete) one(); else { im.addEventListener('load', one, { once: true }); im.addEventListener('error', one, { once: true }); } });
+    if (!imgs.length) go();
+    setTimeout(go, 1500);
+  });
+  if (M.warn && window.console) console.warn('[datos] ' + M.warn);   // lo que no respondió, para arreglarlo
   // ---------------- el canal se vuelve la barra de arriba ----------------
   // Arriba de todo no hay barra: está el canal entero. Al bajar, el canal se va achicando con el scroll hasta ser
   // una barra como la de antes, pegada arriba de todo: la foto chica y el nombre a la izquierda, y a la derecha
   // los íconos de la barra (Discord, Instagram y YouTube). Lo demás del canal se apaga. Al subir, se agranda de
-  // nuevo. En la barra, tocando el nombre vuelve arriba.
+  // nuevo. Tocando el nombre, baja hasta el final (y, si ya estás abajo, sube).
   (function () {
     var ch = $('#canal'), avw = $('#ch-avw'), nm = $('#ch-n'), G = null, raf = 0;
     var BYCSS = !!(window.CSS && CSS.supports && CSS.supports('animation-timeline: scroll()'));   // la foto y el nombre los mueve el CSS
@@ -1394,18 +1741,13 @@
     window.addEventListener('resize', measure);
     if (window.ResizeObserver) new ResizeObserver(function () { measure(); }).observe(ch);
     measure();
-    nm.addEventListener('click', function () { if (ch.classList.contains('bar')) PAGE.scrollTo({ top: 0, behavior: still() ? 'auto' : 'smooth' }); });
   })();
-  // el link del título apunta adonde va: al pie o, abajo de todo, al principio
-  var bar = $('#topbar'), titleHref = function () { $('#top-t').setAttribute('href', atEnd() ? '#top' : '#pie'); };
-  PAGE.addEventListener('scroll', titleHref, { passive: true }); titleHref();
-  // la rueda sobre la barra (y sobre la barra de scroll) también desliza los videos, como si fueran parte de la página
+  // la rueda sobre la barra de scroll también desliza los videos, como si fuera parte de la página
   var wheelToPage = function (e) {
     if (e.ctrlKey || !e.deltaY) return;
     var k = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? PAGE.clientHeight : 1;
     PAGE.style.scrollBehavior = 'auto'; PAGE.scrollTop += e.deltaY * k; PAGE.style.removeProperty('scroll-behavior');
   };
-  bar.addEventListener('wheel', wheelToPage, { passive: true });
 
   // ---------------- la barra de scroll propia, adentro de las ventanas ----------------
   // La misma de la página, sobre el borde derecho de lo que se desliza adentro de una ventana: la lista del
