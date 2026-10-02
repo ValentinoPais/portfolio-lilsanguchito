@@ -845,7 +845,7 @@
   // con Esc o bajándolo), sigue en uno chico, que queda hasta que se lo cierra con su cruz: en la compu, flotando en una esquina (se arrastra y queda en la más
   // cercana), con la cruz encima al pasar el mouse y, en el medio, el play o la pausa de YouTube; en el celular, una barra abajo de todo, como en la
   // app: el video (tocándolo, pausa o sigue), el título y la cruz (y se baja con el dedo para cerrarlo). Tocándolo
-  // (en el celular, el título) se agranda de nuevo. Es la misma ventana, achicada: el video no se corta ni se recarga y en pausa queda su cuadro.
+  // (en el celular, el título, o subiéndolo con el dedo) se agranda de nuevo. Es la misma ventana, achicada: el video no se corta ni se recarga y en pausa queda su cuadro.
   var WD = $('#dlgWatch'), miOn = null;
   var isMini = function () { return WD.open && WD.classList.contains('mini'); };
   var hasVideo = function () { return !!$('#w-stage iframe'); };   // el video ya cargado (sonando o en pausa): al cerrar, queda el mini
@@ -1377,27 +1377,31 @@
     MI.c = c; try { localStorage.setItem('portfolio-mini', c); } catch (x) {}
   }
   window.addEventListener('pointerup', miDrop); window.addEventListener('pointercancel', miDrop); window.addEventListener('blur', miDrop);   // también si se va de la ventana arrastrándolo
-  // el mini, en el celular: se baja con el dedo para cerrarlo, como en la app
+  // el mini, en el celular, como en la app: se baja con el dedo para cerrarlo y se sube para agrandarlo. Mientras
+  // tanto sigue al dedo; al soltar, pasado un tramo, se cierra o se agranda y, si no, vuelve rápido
   (function () {
     var p = $('#dlgWatch .panel'), g = null;
-    p.addEventListener('pointerdown', function (e) { if (isMini() && stacked() && !e.target.closest('.mi-b')) g = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false, dy: 0 }; });
+    p.addEventListener('pointerdown', function (e) { if (isMini() && stacked() && !e.target.closest('.mi-b')) g = { id: e.pointerId, x: e.clientX, y: e.clientY, on: false, dy: 0, top: p.getBoundingClientRect().top }; });
     p.addEventListener('pointermove', function (e) {
       if (!g || e.pointerId !== g.id) return;
       var dx = e.clientX - g.x, dy = e.clientY - g.y;
-      if (!g.on) { if (dy < 8 || Math.abs(dx) > dy) return; g.on = true; try { p.setPointerCapture(e.pointerId); } catch (x) {} }
-      g.dy = Math.max(0, dy); p.style.transform = 'translateY(' + g.dy.toFixed(1) + 'px)'; p.style.opacity = String(Math.max(.25, 1 - g.dy / 140));
+      if (!g.on) { if (Math.abs(dy) < 8 || Math.abs(dx) > Math.abs(dy)) return; g.on = true; try { p.setPointerCapture(e.pointerId); } catch (x) {} p.getAnimations().forEach(function (a) { a.cancel(); }); }
+      g.dy = Math.max(-g.top, dy);                    // para arriba, como mucho hasta arriba de todo
+      p.style.transform = 'translateY(' + g.dy.toFixed(1) + 'px)'; p.style.opacity = String(Math.max(.25, 1 - Math.max(0, g.dy) / 140));
     });
     function up() {
       var k = g; g = null;
       if (!k || !k.on) return;
-      MI.swallow = true; setTimeout(function () { MI.swallow = false; });   // el clic de soltar no lo agranda
+      MI.swallow = true; setTimeout(function () { MI.swallow = false; });   // el clic de soltar no lo agranda ni lo pausa
       var clear = function () { p.style.transform = ''; p.style.opacity = ''; };
-      if (k.dy < 36) return clear();
+      if (k.dy <= -48) { clear(); return reopen(false); }   // para arriba, pasado el tramo: se agranda, como tocándolo
+      if (k.dy < 36) { clear(); if (!still()) p.animate([{ transform: 'translateY(' + k.dy + 'px)' }, { transform: 'none' }], { duration: 140, easing: EASE }); return; }   // si no, vuelve rápido
       if (still()) { clear(); return WD.close(); }
       p.animate([{ transform: 'translateY(' + k.dy + 'px)', opacity: p.style.opacity }, { transform: 'translateY(110%)', opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' })
         .finished.then(function (an) { WD.close(); clear(); an.cancel(); }, clear);
     }
     p.addEventListener('pointerup', up); p.addEventListener('pointercancel', up);
+    window.addEventListener('blur', function () { if (g && g.on) up(); else g = null; });   // si te vas arrastrándolo, se resuelve al toque
   })();
 
   // los controles, sobre el video horizontal. Además, se arrastra para abajo desde cualquier parte del video (en la
@@ -1694,14 +1698,15 @@
     requestAnimationFrame(function () { shTick = false; shActive(shIndex()); });
   }, { passive: true });
   // deslizando el vertical de costado (con el dedo, para un lado o el otro) se cierra, como el horizontal para abajo:
-  // el vertical sigue al dedo y el fondo se va aclarando; cuando ya no se ve (en el tramo), soltándolo se cierra y,
-  // si no, vuelve. Generoso: un roce de costado no cuenta, y para arriba o para abajo pasa al otro vertical
+  // sigue al dedo solo el que está en pantalla (los que asoman arriba y abajo quedan quietos) y el fondo se va
+  // aclarando; cuando ya no se ve (en el tramo), soltándolo se cierra y, si no, vuelve. Generoso: un roce de costado
+  // no cuenta, y para arriba o para abajo pasa al otro vertical
   (function () {
-    var hz = null, swallow = false;
+    var hz = null, swallow = false, last = 0;
     var far = function () { return Math.min(150, innerWidth * .35); };
     SH.feed.addEventListener('pointerdown', function (e) {
-      if (e.pointerType === 'mouse' || !e.target.closest('.sh-it.on .sh-v')) return;
-      hz = { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, on: false, raf: 0 };
+      var v = e.pointerType !== 'mouse' && e.target.closest('.sh-it.on .sh-v');
+      if (v) hz = { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, on: false, raf: 0, it: v.closest('.sh-it') };
     });
     SH.feed.addEventListener('pointermove', function (e) {
       if (!hz || e.pointerId !== hz.id) return;
@@ -1710,32 +1715,49 @@
         if (ay > 14 && ay > ax) { hz = null; return; }   // para arriba o para abajo: es el otro vertical
         if (ax < 24 || ax < ay * 1.6) return;            // un roce no cuenta
         hz.on = true; hz.x0 = dx > 0 ? 24 : -24; SH.d.classList.add('sh-drag');
-        try { SH.feed.setPointerCapture(e.pointerId); } catch (x) {}
-        SH.feed.getAnimations().forEach(function (a) { a.cancel(); });
+        try { hz.it.setPointerCapture(e.pointerId); } catch (x) {}
+        hz.it.getAnimations().forEach(function (a) { a.cancel(); });
       }
       hz.dx = dx - hz.x0;
       var k = hz;
       if (!k.raf) k.raf = requestAnimationFrame(function () {
         k.raf = 0; if (hz !== k) return;
-        SH.feed.style.transform = 'translateX(' + k.dx.toFixed(1) + 'px)';
+        k.it.style.transform = 'translateX(' + k.dx.toFixed(1) + 'px)';
         SH.d.style.setProperty('--bd', Math.max(0, 1 - Math.abs(k.dx) / far()).toFixed(3));   // transparente justo en el tramo
       });
     });
-    function back() { SH.feed.style.transform = ''; SH.d.style.removeProperty('--bd'); SH.d.classList.remove('sh-drag'); }
-    function end(e) {
+    function end() {
       var k = hz; hz = null;
       if (!k) return;
       if (k.raf) cancelAnimationFrame(k.raf);
       if (!k.on) return;
       swallow = true; setTimeout(function () { swallow = false; });   // soltarlo no pausa
-      back();
+      k.it.style.transform = ''; SH.d.style.removeProperty('--bd'); SH.d.classList.remove('sh-drag');
       if (Math.abs(k.dx) >= far()) return SH.d.close();   // pasado el tramo: se cierra, al toque
-      if (!still()) SH.feed.animate([{ transform: 'translateX(' + k.dx + 'px)' }, { transform: 'none' }], { duration: 140, easing: EASE });   // si no, vuelve rápido
+      if (!still()) k.it.animate([{ transform: 'translateX(' + k.dx + 'px)' }, { transform: 'none' }], { duration: 140, easing: EASE });   // si no, vuelve rápido
     }
     SH.feed.addEventListener('pointerup', end); SH.feed.addEventListener('pointercancel', end);
-    SH.feed.addEventListener('lostpointercapture', function (e) { if (e.target === SH.feed && hz && hz.on && e.pointerId === hz.id) end(e); });
+    SH.feed.addEventListener('lostpointercapture', function (e) { if (hz && hz.on && e.target === hz.it && e.pointerId === hz.id) end(); });
     window.addEventListener('blur', function () { if (hz && hz.on) end(); else hz = null; });
     SH.feed.addEventListener('click', function (e) { if (swallow) { swallow = false; e.preventDefault(); e.stopPropagation(); } }, true);
+    // y siempre queda uno en el centro: si al terminar de deslizar quedó entre dos (pasa en algunos celulares), se
+    // termina de acomodar en el más cercano
+    function settle() {
+      var f = SH.feed, first = SH.items[0];
+      if (!SH.d.open || !first || (hz && hz.on) || f.classList.contains('drag')) return;
+      if (f.scrollLeft) f.scrollLeft = 0;
+      SH.mt = parseFloat(getComputedStyle(first).scrollMarginTop) || 0;   // por si cambió el alto de la pantalla
+      var n = shIndex(), top = Math.min(SH.items[n].offsetTop - SH.mt, f.scrollHeight - f.clientHeight);
+      if (Math.abs(f.scrollTop - top) <= 2) return;
+      var now = performance.now(); if (now - last < 1000) return; last = now;   // una vez y listo: no se pelea con el navegador
+      f.scrollTo({ top: top, behavior: still() ? 'auto' : 'smooth' });
+    }
+    if ('onscrollend' in window) SH.feed.addEventListener('scrollend', settle);
+    else {                                               // sin aviso de fin (Safari): cuando se queda quieto, sin el dedo encima
+      var idle = 0, down = 0, fingers = function (e) { down = e.touches.length; };
+      ['touchstart', 'touchend', 'touchcancel'].forEach(function (t) { SH.feed.addEventListener(t, fingers, { passive: true }); });
+      SH.feed.addEventListener('scroll', function () { clearTimeout(idle); idle = setTimeout(function () { if (!down) settle(); }, 200); }, { passive: true });
+    }
   })();
   SH.d.addEventListener('close', function () { if (SH.d.open) return; SH.feed.innerHTML = ''; SH.items = []; SH.i = -1; pReset(RP); clearTimeout(RT.timer); });   // si ya se volvió a abrir, no se vacía
   // con el dedo: en el último, deslizando para arriba (como para ver el siguiente), se cierra
@@ -1811,7 +1833,7 @@
   document.addEventListener('click', function (e) {
     var t = e.target, el;
     if (MI.swallow) { MI.swallow = false; return; }                // soltando el mini reproductor después de moverlo
-    if (t.closest('#ch-n')) return toEnd();                         // el nombre del canal: hasta abajo de todo o, si ya estás abajo, arriba
+    if (t.closest('#ch-n') || onBar(t, e)) return toTop();          // la barra de arriba o el nombre del canal: arriba de todo o, si ya estás arriba, abajo de todo
     if (t.closest('a[href]')) return;                                 // el canal y el original: se abren aparte
     if ((el = t.closest('.d-more'))) {                                // abre y cierra la descripción
       var open = $('#w-desc').classList.toggle('open');
@@ -1843,11 +1865,15 @@
     }
   });
 
-  // el nombre del canal: baja hasta el final de la página y, si ya estás abajo de todo, sube al principio
-  function atEnd() { return PAGE.scrollTop + PAGE.clientHeight >= PAGE.scrollHeight - 8; }
-  function toEnd() {
+  // la barra de arriba (la franja de arriba de todo: el canal ya achicado) y el nombre del canal: suben hasta arriba
+  // de todo y, si ya estás arriba, bajan hasta el final de la página. La foto y los íconos de las redes, no: son links
+  function onBar(t, e) {
+    var ch = $('#canal');
+    return !!t.closest('#canal') && !t.closest('a[href], button, #top-links') && e.clientY <= (parseFloat(getComputedStyle(ch, '::after').height) || 56);
+  }
+  function toTop() {
     var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    PAGE.scrollTo({ top: atEnd() ? 0 : PAGE.scrollHeight, behavior: reduce ? 'auto' : 'smooth' });
+    PAGE.scrollTo({ top: PAGE.scrollTop > 8 ? 0 : PAGE.scrollHeight, behavior: reduce ? 'auto' : 'smooth' });
   }
 
   // ---------------- config: la barra de arriba ----------------
@@ -1904,7 +1930,7 @@
   // ---------------- el canal se vuelve la barra de arriba ----------------
   // Arriba de todo no hay barra: está el canal entero. Al bajar, el canal se va achicando con el scroll hasta ser
   // una barra como la de antes, pegada arriba de todo: la foto chica y el nombre a la izquierda, y a la derecha
-  // los íconos de las redes, que ya estaban ahí. Lo demás del canal se apaga. Al subir, se agranda de nuevo. Tocando el nombre, baja hasta el final (y, si ya estás abajo, sube).
+  // los íconos de las redes, que ya estaban ahí. Lo demás del canal se apaga. Al subir, se agranda de nuevo. Tocando la barra (o el nombre), sube hasta arriba de todo (y, si ya estás arriba, baja hasta el final).
   (function () {
     var ch = $('#canal'), avw = $('#ch-avw'), nm = $('#ch-n'), tl = $('#top-links'), G = null, raf = 0;
     var BYCSS = !!(window.CSS && CSS.supports && CSS.supports('animation-timeline: scroll()'));   // la foto y el nombre los mueve el CSS

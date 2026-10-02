@@ -378,9 +378,8 @@ dialog.watch.mini.c-tl { inset: calc(var(--barH) + 16px) auto auto 16px; }
    título, las views y los likes, y el canal. Se pasan con la rueda, el dedo, arrastrando o con las flechas */
 dialog.shorts { --shGap: 12px; --peek: calc(var(--frame) - var(--shGap)); --shV: min(100dvh - 2 * var(--peek) - 2 * var(--shGap), (100vw - 436px) * 16 / 9, (100vw - 76px) / 2 * 16 / 9); --shW: calc(var(--shV) * 9 / 16); --shP: max(360px, var(--shW)); }   /* --shP: la descripción, tan ancha como el reel y nunca menos de 360 px */   /* --shGap: el margen chico entre un reel y el siguiente */
 dialog.shorts[open] { display: block; }
-dialog.shorts { overflow: hidden; }   /* deslizando el vertical de costado, sin barras de scroll */
 dialog.shorts.sh-drag::backdrop { transition: none; }   /* el fondo sigue al dedo */
-.sh-feed { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; scroll-snap-type: y mandatory; scrollbar-width: none; padding: calc(var(--peek) + var(--shGap)) 0 calc(100dvh - var(--shV) - 2 * var(--shGap) - var(--peek)); }
+.sh-feed { position: absolute; inset: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scroll-snap-type: y mandatory; scrollbar-width: none; padding: calc(var(--peek) + var(--shGap)) 0 calc(100dvh - var(--shV) - 2 * var(--shGap) - var(--peek)); }   /* de costado no se corre: deslizando el vertical para cerrarlo, se mueve solo ese */
 .sh-feed::-webkit-scrollbar { display: none; }
 .sh-feed.drag { scroll-snap-type: none; cursor: grabbing; user-select: none; }   /* arrastrando con el mouse, como un dedo */
 .sh-it { display: grid; grid-template-columns: var(--shW) var(--shP); column-gap: var(--gut); width: max-content; margin: 0 0 var(--shGap) clamp(var(--gut), 50vw - var(--shW) / 2, 100vw - var(--shW) - var(--shP) - 64px);   /* el reel, centrado en la pantalla; la descripción, a su derecha */ scroll-snap-align: start; scroll-snap-stop: always; scroll-margin-top: calc(var(--peek) + var(--shGap)); }
