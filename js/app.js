@@ -192,6 +192,7 @@
   // enseguida vuelve suave a su velocidad de siempre, que es también la mínima, así nunca se termina de parar
   // (y sigue para el lado al que la empujaste). Las filas se alternan: una va para un lado y la siguiente
   // para el otro. Es infinita: después del último viene el primero.
+  var TOUCH = matchMedia('(hover: none)').matches;      // celular o tablet
   var SPEED = 30;                                          // px por segundo: la velocidad de siempre y la mínima
   var GLIDE = 300;                                         // ms: qué tan rápido se apaga el envión
   var MAXV = 1600;                                         // px por segundo: el envión más fuerte
@@ -233,7 +234,7 @@
       return looped ? ((i % k) + k) % k : i;
     }
     // el scroll solo acepta píxeles enteros: el resto va como un corrimiento de las tarjetas
-    function sub(x) { track.style.translate = x ? x.toFixed(2) + 'px 0' : ''; }   // se corre la fila entera: un solo elemento por cuadro
+    function sub(x) { if (!TOUCH) track.style.translate = x ? x.toFixed(2) + 'px 0' : ''; }   // se corre la fila entera: un solo elemento por cuadro (en el celular, no: ahí pesaba mucho)
     function halt() {                                  // la agarró la mano: queda donde está
       if (running) { track.scrollLeft = Math.round(pos); sub(0); }
       running = false;
@@ -530,7 +531,11 @@
   document.addEventListener('pointermove', function (e) { if (e.pointerType === 'mouse' && e.buttons && dragging()) noSel(); }, true);
 
   // ---------------- ventanas ----------------
-  function show(d) { if (d.open) return; try { d.showModal(); } catch (e) { d.setAttribute('open', ''); } }
+  function show(d) {                                  // abre la ventana (sin bloquear la página: ver el CSS) y le pasa el foco
+    if (d.open) return;
+    try { d.show(); } catch (e) { d.setAttribute('open', ''); }
+    var f = d.querySelector('[autofocus]'); if (f) try { f.focus({ preventScroll: true }); } catch (e) {}
+  }
   var EASE = 'cubic-bezier(.2, .8, .2, 1)';
   var still = function () { return matchMedia('(prefers-reduced-motion: reduce)').matches; };
   var fadeAt = function (p) { return Math.max(.25, 1 - .6 * Math.max(0, p)); };   // lo que se arrastra para irse se va difuminando: justo en el tramo, al 40 %
@@ -617,7 +622,7 @@
   // ---------------- el ojo de las views ----------------
   // Un easter egg: muy cada tanto (entre medio minuto y un minuto y pico) uno de los ojos de las views que se ven
   // parpadea, a veces dos veces seguidas, sin ruido; tocando las views, parpadea ese, con un pop. En todos lados: las tarjetas, la lista
-  // del reproductor, sus views y las de los verticales.
+  // del reproductor, sus views y las de los verticales (de los que se ven de verdad: no los tapados, ni los de los verticales que asoman).
   var EYES = '.yt-v svg, .w-it-v svg, .w-views svg, .sh-a.v svg';
   function blink(svg, twice, noise) {
     if (noise) pop();
@@ -629,8 +634,13 @@
   (function rare() {
     setTimeout(function () {
       var root = document.querySelector('dialog.dlg[open]:not(.mini)') || document;   // con una ventana abierta, los de la ventana
-      if (!document.hidden) {
-        var vis = [].filter.call(root.querySelectorAll(EYES), function (s) { var r = s.getBoundingClientRect(); return r.width && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth; });
+      if (!document.hidden && !HELD) {
+        var vis = [].filter.call(root.querySelectorAll(EYES), function (s) {   // solo los que se ven de verdad: no tapados, recortados ni apagados
+          var r = s.getBoundingClientRect();
+          if (!r.width || r.bottom <= 0 || r.top >= innerHeight || r.right <= 0 || r.left >= innerWidth) return false;
+          var hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2), box = s.closest('.yt-v, .w-it-v, .w-views, .sh-a.v');
+          return !!hit && (s.contains(hit) || (!!box && box.contains(hit)));
+        });
         if (vis.length) blink(vis[Math.floor(Math.random() * vis.length)], Math.random() < .3);
       }
       rare();
@@ -864,10 +874,11 @@
   var isMini = function () { return WD.open && WD.classList.contains('mini'); };
   var hasVideo = function () { return !!$('#w-stage iframe'); };   // el video ya cargado (sonando o en pausa): al cerrar, queda el mini
   function setMini(on) { WD.classList.toggle('mini', on); document.documentElement.classList.toggle('has-mini', on); ui(false); }
-  function reopen(mini) {                             // la misma ventana, grande o chica: el video sigue sonando
-    WA.keep++; WD.close(); setMini(mini);
-    if (mini) { WD.show(); miOn = null; paintMini(); try { PAGE.focus({ preventScroll: true }); } catch (e) {} }
-    else { show(WD); requestAnimationFrame(fitDesc); setTimeout(WB, 320); }
+  function reopen(mini) {                             // la misma ventana, grande o chica, al toque (solo cambia su clase): el video sigue sonando
+    if (!WD.open) show(WD);
+    setMini(mini);
+    if (mini) { miOn = null; paintMini(); try { PAGE.focus({ preventScroll: true }); } catch (e) {} }
+    else { try { WD.querySelector('.panel').focus({ preventScroll: true }); } catch (e) {} requestAnimationFrame(fitDesc); setTimeout(WB, 320); }
     WB();
   }
   function closeWatch() { if (fsEl()) fsExit(); if (!isMini() && hasVideo()) reopen(true); else WD.close(); }
@@ -1573,7 +1584,12 @@
     stage.addEventListener('lostpointercapture', function (e) { if (e.target === stage && g && g.on && e.pointerId === g.id) up({ type: 'lost' }); });   // (no la de un botón de adentro, que se la pasa)
     vp.addEventListener('dblclick', function (e) { e.preventDefault(); });
   })();
-  WD.addEventListener('cancel', function (e) { if (fsEl()) { e.preventDefault(); return; } if (hasVideo()) { e.preventDefault(); setTimeout(function () { reopen(true); }); } });   // Esc
+  // Esc: los verticales se cierran; el reproductor se achica (o, sin video, se cierra). En pantalla completa, sale de ahí
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    if (SH.d.open) { e.preventDefault(); return SH.d.close(); }
+    if (WD.open && !isMini() && !fsEl()) { e.preventDefault(); closeWatch(); }
+  });
 
   // ---------------- en la compu, también se scrollea arrastrando, como con el dedo ----------------
   // Con el mouse se agarra la página, el reproductor o su lista y se los desliza para arriba o para abajo;
@@ -1755,37 +1771,58 @@
     var hz = null, swallow = false, last = 0;
     var far = function () { return Math.min(150, innerWidth * .35); };
     SH.feed.addEventListener('pointerdown', function (e) {
-      var v = e.pointerType !== 'mouse' && e.target.closest('.sh-it.on .sh-v');
-      if (v) hz = { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, on: false, raf: 0, it: v.closest('.sh-it') };
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      var v = e.target.closest('.sh-it.on .sh-v');     // con el dedo o con el mouse, desde el video
+      if (v) hz = { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, on: false, raf: 0, it: v.closest('.sh-it'), mouse: e.pointerType === 'mouse' };
     });
     SH.feed.addEventListener('pointermove', function (e) {
       if (!hz || e.pointerId !== hz.id) return;
       var dx = e.clientX - hz.x, ax = Math.abs(dx), ay = Math.abs(e.clientY - hz.y);
       if (!hz.on) {
-        if (ay > 14 && ay > ax) { hz = null; return; }   // para arriba o para abajo: es el otro vertical
+        if ((ay > 14 && ay > ax) || SH.vdrag) { hz = null; return; }   // para arriba o para abajo: es el otro vertical
         if (ax < 24 || ax < ay * 1.6) return;            // un roce no cuenta
-        hz.on = true; hz.x0 = dx > 0 ? 24 : -24; HELD = 1; SH.d.classList.add('sh-drag');
+        hz.on = true; hz.x0 = dx > 0 ? 24 : -24; HELD = 1; SH.side = true; SH.d.classList.add('sh-drag');
+        if (hz.mouse) { document.documentElement.classList.add('grabbing'); noSel(); }
         try { hz.it.setPointerCapture(e.pointerId); } catch (x) {}
         hz.it.getAnimations().forEach(function (a) { a.cancel(); });
       }
       hz.dx = dx - hz.x0;
-      var k = hz;
+      later(hz);
+    });
+    function later(k) {                                // una vez por cuadro: el vertical, corrido y difuminado, y el fondo
       if (!k.raf) k.raf = requestAnimationFrame(function () {
-        k.raf = 0; if (hz !== k) return;
+        k.raf = 0; if (hz !== k && wz !== k) return;
         k.it.style.transform = 'translateX(' + k.dx.toFixed(1) + 'px)'; k.it.style.opacity = fadeAt(Math.abs(k.dx) / far()).toFixed(3);
         SH.d.style.setProperty('--bd', Math.max(0, 1 - Math.abs(k.dx) / far()).toFixed(3));   // transparente justo en el tramo
       });
-    });
+    }
     function end() {
       var k = hz; hz = null;
       if (!k) return;
       if (k.raf) cancelAnimationFrame(k.raf);
       if (!k.on) return;
       swallow = true; setTimeout(function () { swallow = false; });   // soltarlo no pausa
-      unheld(); k.it.style.transform = ''; k.it.style.opacity = ''; SH.d.style.removeProperty('--bd'); SH.d.classList.remove('sh-drag');
-      if (Math.abs(k.dx) >= far()) return SH.d.close();   // pasado el tramo: se cierra, al toque
-      if (!still()) k.it.animate([{ transform: 'translateX(' + k.dx + 'px)', opacity: fadeAt(Math.abs(k.dx) / far()) }, { transform: 'none', opacity: 1 }], { duration: 140, easing: EASE });   // si no, vuelve rápido
+      if (k.mouse) document.documentElement.classList.remove('grabbing');
+      finish(k);
     }
+    function finish(k) {                               // al soltar: pasado el tramo, se cierra al toque; si no, vuelve rápido
+      SH.side = false; unheld(); k.it.style.transform = ''; k.it.style.opacity = ''; SH.d.style.removeProperty('--bd'); SH.d.classList.remove('sh-drag');
+      if (Math.abs(k.dx) >= far()) return SH.d.close();
+      if (!still()) k.it.animate([{ transform: 'translateX(' + k.dx + 'px)', opacity: fadeAt(Math.abs(k.dx) / far()) }, { transform: 'none', opacity: 1 }], { duration: 140, easing: EASE });
+    }
+    // con el trackpad (o shift y la rueda), de costado: igual que con el dedo; se suelta cuando el gesto termina
+    var wz = null;
+    SH.wheel = function (dx, can) {
+      if (!wz) {
+        var it = SH.items[SH.i];
+        if (!can || !dx || hz || !it) return false;
+        wz = { dx: 0, it: it, raf: 0, t: 0 }; HELD = 1; SH.side = true; SH.d.classList.add('sh-drag');
+        it.getAnimations().forEach(function (a) { a.cancel(); });
+      }
+      wz.dx -= dx; later(wz);                          // el gesto para un lado: el vertical se va para ese lado
+      clearTimeout(wz.t); wz.t = setTimeout(function () { var k = wz; wz = null; if (k.raf) cancelAnimationFrame(k.raf); finish(k); }, 160);
+      return true;
+    };
     SH.feed.addEventListener('pointerup', end); SH.feed.addEventListener('pointercancel', end);
     SH.feed.addEventListener('lostpointercapture', function (e) { if (hz && hz.on && e.target === hz.it && e.pointerId === hz.id) end(); });
     window.addEventListener('blur', function () { if (hz && hz.on) end(); else hz = null; });
@@ -1844,12 +1881,14 @@
     var rd = e.target.closest && e.target.closest('.sh-pan .d-txt, .sh-dx');
     if (e.ctrlKey || (rd && rd.scrollHeight > rd.clientHeight + 1)) return;   // zoom, o leyendo una descripción larga
     e.preventDefault();
+    var hx = e.deltaX || (e.shiftKey ? e.deltaY : 0), vy = e.shiftKey && !e.deltaX ? 0 : e.deltaY;
+    if (SH.wheel(hx * (e.deltaMode === 1 ? 16 : 1), Math.abs(hx) > Math.abs(vy) && !wh.lock && !wh.acc)) return;   // de costado: se cierra, como con el dedo
     var now = performance.now();
     clearTimeout(wh.idle);
     var release = function () { var left = wh.until - performance.now(); if (left > 0) wh.idle = setTimeout(release, left); else { wh.lock = false; wh.acc = 0; } };
     wh.idle = setTimeout(release, 180);                  // el gesto terminó cuando la rueda se queda quieta
     if (wh.lock) return;
-    wh.acc += e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    wh.acc += e.deltaMode === 1 ? vy * 16 : vy;
     if (Math.abs(wh.acc) < 24) return;
     wh.lock = true; wh.until = now + 420;
     shGo(SH.i + (wh.acc > 0 ? 1 : -1)); wh.acc = 0;
@@ -1859,12 +1898,13 @@
     var f = SH.feed, drag = null, moved = false;
     f.addEventListener('pointerdown', function (e) {
       if (e.pointerType !== 'mouse' || e.button !== 0 || e.target.closest('a, .sh-pan, .sh-dx, .vp-bar, .vp-big')) return;
-      drag = { id: e.pointerId, y: e.clientY, top: f.scrollTop, ly: e.clientY, lt: performance.now(), v: 0, on: false, from: SH.i }; moved = false;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, top: f.scrollTop, ly: e.clientY, lt: performance.now(), v: 0, on: false, from: SH.i }; moved = false; SH.vdrag = false;
     });
     f.addEventListener('pointermove', function (e) {
       if (!drag || e.pointerId !== drag.id) return;
       var dy = e.clientY - drag.y, now = performance.now();
-      if (!drag.on && Math.abs(dy) > 6) { drag.on = true; moved = true; f.classList.add('drag'); f.setPointerCapture(e.pointerId); noSel(); }
+      if (!drag.on && SH.side) { drag = null; return; }   // de costado: lo cierra
+      if (!drag.on && Math.abs(dy) > 6 && Math.abs(dy) >= Math.abs(e.clientX - drag.x)) { drag.on = true; SH.vdrag = true; moved = true; f.classList.add('drag'); f.setPointerCapture(e.pointerId); noSel(); }
       if (!drag.on) return;
       f.scrollTop = drag.top - dy;
       drag.v = 0.8 * drag.v + 0.2 * ((e.clientY - drag.ly) / Math.max(1, now - drag.lt));   // px por ms
@@ -1874,6 +1914,7 @@
       if (!drag || (e && e.pointerId !== drag.id)) return;
       var d = drag; drag = null;
       if (!d.on) return;
+      SH.vdrag = false;
       var dy = e.clientY - d.y, to = d.from;                       // pasa si lo arrastraste un poco o rápido
       if (dy < -60 || d.v < -0.45) to = d.from + 1; else if (dy > 60 || d.v > 0.45) to = d.from - 1;
       shGo(to);

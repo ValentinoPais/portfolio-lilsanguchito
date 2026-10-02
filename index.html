@@ -59,22 +59,55 @@ img { display: block; max-width: 100%; }
 .lab { display: block; font: 500 11px/1.2 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 
 /* ---------- pantalla de carga ----------
-   Mientras llegan los datos (la planilla y YouTube): un play violeta que late, con un aro alrededor que gira (como
-   un video cargando), y el nombre debajo. Se mueve en su propia capa: no se traba aunque la página esté ocupada
-   armándose. Cuando la página está lista (con la foto del canal y las primeras miniaturas), se agranda un toque y
-   se apaga suave */
-.carga { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: var(--bg); transition: opacity .45s ease, visibility 0s linear .45s; }
-.carga.out { opacity: 0; visibility: hidden; pointer-events: none; }
-.carga-in { display: grid; justify-items: center; gap: 22px; padding: 16px; transition: transform .45s cubic-bezier(.2, .8, .2, 1); }
-.carga.out .carga-in { transform: scale(1.08); }
-.carga-p { position: relative; width: 76px; height: 76px; }
-.carga-p::before, .carga-p::after { content: ""; position: absolute; inset: 0; border: 3px solid rgba(236, 234, 228, .1); border-radius: 50%; }   /* el aro, apenas */
-.carga-p::after { border-color: var(--acc) transparent transparent; animation: carga-giro 1s cubic-bezier(.55, .2, .45, .8) infinite; }   /* y su parte violeta, girando */
-.carga-p i { position: absolute; inset: 0; display: grid; place-items: center; color: var(--acc); animation: carga-late 1.3s ease-in-out infinite; }   /* el play, latiendo */
-.carga-p svg { width: 34px; height: 34px; }
-.carga b { font: 700 24px/1.2 var(--sans); letter-spacing: -.01em; color: var(--text); }
-@keyframes carga-giro { to { transform: rotate(360deg); } }
-@keyframes carga-late { 0%, 55%, 100% { transform: scale(1); } 18% { transform: scale(1.16); } 34% { transform: scale(.93); } }
+   La página aparece al toque, en cajitas grises quietas donde va a ir cada cosa (el canal, los temas y los
+   videos), y arriba de todo avanza una barrita violeta, como en YouTube, mientras llegan los datos (la planilla y
+   YouTube). Cuando la página está lista (con la foto del canal y las primeras miniaturas), la barrita llega al
+   final y se apaga, y las cajitas se desvanecen dejando ver lo de verdad, que ya está debajo, en el mismo lugar.
+   Lo único que se mueve es la barrita, en su propia capa: no se traba aunque la página esté ocupada armándose */
+.carga { position: fixed; inset: 0; z-index: 100; }
+.carga.out { pointer-events: none; }
+.carga-bar { position: absolute; z-index: 1; top: 0; left: 0; right: 0; height: 3px; background: var(--acc); box-shadow: 0 0 10px rgba(146, 114, 240, .65); transform-origin: 0 50%; transform: scaleX(0); animation: carga-bar 12s cubic-bezier(.05, .7, .2, 1) forwards; will-change: transform; }
+.carga.out .carga-bar { animation: none; transform: scaleX(1); opacity: 0; transition: transform .25s ease-out, opacity .3s ease .25s; }   /* llega al final y se apaga */
+@keyframes carga-bar { 0% { transform: scaleX(0); } 12% { transform: scaleX(.36); } 100% { transform: scaleX(.9); } }   /* rápido al principio y cada vez más despacio, sin llegar nunca sola */
+.carga-sk { position: absolute; inset: 0; overflow: hidden; padding: 0 var(--gut); background: var(--bg); transition: opacity .4s ease .1s; }
+.carga.out .carga-sk { opacity: 0; }
+.carga-sk i { display: block; background: var(--bg3); }
+.sk-ch { position: relative; display: flex; align-items: flex-start; gap: 24px; margin: 0 calc(-1 * var(--gut)); padding: calc(24px + env(safe-area-inset-top, 0px)) max(16px, (100% - var(--maxW)) / 2 + var(--gut)) 28px; border-bottom: 1px solid var(--line); }
+.sk-av { flex: none; width: 160px; height: 160px; border-radius: 50%; }
+.sk-t { flex: 1; min-width: 0; max-width: 760px; padding-top: 15px; }
+.sk-n { width: 250px; max-width: 70%; height: 30px; margin-bottom: 17px; border-radius: 6px; }
+.sk-s { width: 300px; max-width: 80%; height: 13px; margin-bottom: 16px; border-radius: 4px; }
+.sk-dd i { height: 12px; margin-bottom: 8px; border-radius: 4px; }
+.sk-dd i.c { width: 64%; }
+.sk-dd i.c + i { margin-top: 20px; }            /* el otro párrafo */
+.sk-dd i.m { display: none; }                   /* renglones de más, para el celular */
+.sk-l { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 18px); right: max(26px, (100% - var(--maxW)) / 2 + var(--gut) + 10px); display: flex; gap: 22px; }
+.sk-l i { width: 20px; height: 20px; border-radius: 50%; }
+.sk-cp { display: flex; gap: 12px; max-width: var(--maxW); margin: 12px auto 24px; overflow: hidden; }
+.sk-cp i { flex: none; width: var(--w); height: 32px; border-radius: 8px; }
+.sk-gr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 36px var(--gut); max-width: var(--maxW); margin: 0 auto; }
+.sk-th { aspect-ratio: 16 / 9; }
+.sk-m { display: flex; gap: 12px; margin-top: 12px; }
+.sk-m i.a { flex: none; width: 36px; height: 36px; border-radius: 50%; }
+.sk-m div { flex: 1; min-width: 0; }
+.sk-m i.t { width: 76%; height: 15px; margin: 3px 0 10px; border-radius: 4px; }
+.sk-m i.s { width: 42%; height: 12px; border-radius: 4px; }
+@media (max-width: 759px) { .sk-av { width: 120px; height: 120px; } .sk-n { height: 26px; } .sk-gr { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px var(--gut); } }
+@media (max-width: 599px) {   /* el celular, como el canal en el celular */
+  .sk-ch { display: grid; grid-template-columns: 72px minmax(0, 1fr); column-gap: 16px; row-gap: 12px; align-items: center; padding: calc(16px + env(safe-area-inset-top, 0px)) 16px 20px; }
+  .sk-av { grid-row: 1 / span 2; width: 72px; height: 72px; }
+  .sk-t { display: contents; }
+  .sk-n { grid-column: 2; align-self: end; width: 140px; height: 20px; margin: 0; }
+  .sk-s { grid-column: 2; align-self: start; width: 150px; height: 29px; margin: 0; border-radius: 0; background: linear-gradient(var(--bg3), var(--bg3)) 0 0 / 100% 11px no-repeat, linear-gradient(var(--bg3), var(--bg3)) 0 18px / 72% 11px no-repeat !important; }   /* dos renglones */
+  .sk-dd { grid-column: 1 / -1; }
+  .sk-dd i { margin-bottom: 8px; }
+  .sk-dd i.m { display: block; }
+  .sk-l { top: calc(env(safe-area-inset-top, 0px) + 43px); right: 24px; gap: 16px; }
+  .sk-cp { margin: 12px calc(-1 * var(--gut)) 20px; padding: 0 16px; gap: 8px; }
+  .sk-gr { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .sk-th { margin-inline: calc(-1 * var(--gut)); }   /* de borde a borde, como las miniaturas */
+  .sk-m { margin-top: 10px; }
+}
 
 /* ---------- las redes del canal (Instagram, Discord y el correo): íconos en violeta, arriba a la derecha ---------- */
 .top-links { display: flex; gap: var(--gut); }
@@ -235,13 +268,13 @@ a.yt-ch:hover, a.yt-ch:focus-visible { color: var(--text); }
 .empty { margin: 56px 0; text-align: center; color: var(--muted); font: 400 14px/20px var(--sans); }
 
 /* ---------- ventanas ---------- */
-dialog.dlg { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); border: 0; background: transparent; color: var(--text); }
+dialog.dlg { position: fixed; inset: 0; z-index: 40; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); border: 0; background: transparent; color: var(--text); }
 dialog.dlg[open] { display: grid; place-items: center; }
 dialog.watch { overflow: hidden; }   /* arrastrando el reproductor, no aparecen barras de scroll */
 dialog.watch:has(.panel.w-drag) > .sbar { opacity: 0; }
-dialog.watch:has(.panel.w-drag)::backdrop { transition: none; }   /* arrastrando, el fondo sigue al dedo; al volver, se oscurece rápido */   /* ni la de la lista, que queda quieta */
-@property --bd { syntax: '<number>'; inherits: false; initial-value: 1; }   /* el fondo mientras se arrastra: solo lo lee el fondo, así cambiarlo es liviano */
-dialog.dlg::backdrop { --bd: inherit; opacity: var(--bd, 1); transition: opacity .14s; background: var(--shade); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }   /* igual en las dos ventanas */
+dialog.watch:has(.panel.w-drag)::before { transition: none; }   /* arrastrando, el fondo sigue al dedo; al volver, se oscurece rápido */   /* ni la de la lista, que queda quieta */
+@property --bd { syntax: '<number>'; inherits: false; initial-value: 1; }   /* el fondo mientras se arrastra: solo lo lee el fondo (el ::before de la ventana), así cambiarlo es liviano */
+dialog.dlg::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; --bd: inherit; opacity: var(--bd, 1); transition: opacity .14s; background: var(--shade); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }   /* igual en las dos ventanas */
 dialog.watch .panel:focus, .sh-feed:focus { outline: none; }   /* al abrir, el foco va a la ventana: Tab lleva al play */
 .panel { width: min(1080px, 100% - 2 * var(--gut)); max-height: calc(100% - 2 * var(--gut)); overflow: auto; background: var(--bg2); border: 1px solid var(--line); padding: var(--gut); overscroll-behavior: contain; }
 .x { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line); font: 400 14px/1 var(--sans); }   /* cerrar: redondo */
@@ -259,10 +292,11 @@ dialog.watch .panel:focus, .sh-feed:focus { outline: none; }   /* al abrir, el f
 /* al abrir, las ventanas aparecen de a poco */
 @keyframes pop-in { from { opacity: 0; transform: translateY(10px) scale(.99); } }
 @keyframes fade-in { from { opacity: 0; } }
-dialog.dlg[open]::backdrop { animation: fade-in .22s ease-out; }
+dialog.dlg[open]::before { animation: fade-in .22s ease-out; }
+dialog.watch.mini::before { display: none; }   /* el mini, sin fondo */
 @media (hover: none) {   /* en el celular y la tablet, sin desenfoques ni brillos: pesan mucho y casi no se ven */
   .ch::after { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(11, 11, 10, .96); }
-  dialog.dlg::backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  dialog.dlg::before { -webkit-backdrop-filter: none; backdrop-filter: none; }
   .yt-av::after, .w-av::after, .sh-av::after, .ch-av::after { display: none; }
   dialog.watch[open]:not(.mini) > .panel { will-change: transform, opacity; }   /* la ventana, ya en su capa: arrastrarla no la vuelve a dibujar */
   .sh-v { transition: none; }
@@ -392,7 +426,7 @@ dialog.watch.mini.c-tl { inset: calc(var(--barH) + 16px) auto auto 16px; }
    título, las views y los likes, y el canal. Se pasan con la rueda, el dedo, arrastrando o con las flechas */
 dialog.shorts { --shGap: 12px; --peek: calc(var(--frame) - var(--shGap)); --shV: min(100dvh - 2 * var(--peek) - 2 * var(--shGap), (100vw - 436px) * 16 / 9, (100vw - 76px) / 2 * 16 / 9); --shW: calc(var(--shV) * 9 / 16); --shP: max(360px, var(--shW)); }   /* --shP: la descripción, tan ancha como el reel y nunca menos de 360 px */   /* --shGap: el margen chico entre un reel y el siguiente */
 dialog.shorts[open] { display: block; }
-dialog.shorts.sh-drag::backdrop { transition: none; }   /* el fondo sigue al dedo */
+dialog.shorts.sh-drag::before { transition: none; }   /* el fondo sigue al dedo */
 .sh-feed { position: absolute; inset: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scroll-snap-type: y mandatory; scrollbar-width: none; padding: calc(var(--peek) + var(--shGap)) 0 calc(100dvh - var(--shV) - 2 * var(--shGap) - var(--peek)); }   /* de costado no se corre: deslizando el vertical para cerrarlo, se mueve solo ese */
 .sh-feed::-webkit-scrollbar { display: none; }
 .sh-feed.drag { scroll-snap-type: none; cursor: grabbing; user-select: none; }   /* arrastrando con el mouse, como un dedo */
@@ -557,13 +591,12 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
 .vp-sk span i { width: 0; height: 0; border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 9px solid #fff; }
 .vp-sk.l span i { border-left: 0; border-right: 9px solid #fff; }
 /* los verticales, como Shorts: en pausa, el play en el medio (sin barrita: la que se ve es la del video, si la trae) */
-.vp.r > .vp-big { width: 72px; height: 72px; margin: -36px 0 0 -36px; padding: 18px; background: rgba(0, 0, 0, .45); }
+.vp.r > .vp-big { width: 80px; height: 80px; margin: -40px 0 0 -40px; padding: 21px; background: rgba(0, 0, 0, .72); }   /* el único: tapa al de YouTube, si aparece */
 .vp.r.v-paused > .vp-big { opacity: 1; pointer-events: auto; }
-.sh-v:has(> iframe.yt) > .vp.r > .vp-big { display: none; }   /* en los de YouTube, el play del medio es el de YouTube: el nuestro, solo en los de TikTok */
 /* en la compu, como en YouTube */
 @media (hover: hover) and (pointer: fine) {
   .vp-dim { background: linear-gradient(to top, rgba(0, 0, 0, .62), rgba(0, 0, 0, .28) 52px, rgba(0, 0, 0, 0) 124px); }
-  .vp:not(.r) > .vp-big, .vp.r > .vp-big { display: none; }
+  .vp:not(.r) > .vp-big { display: none; }   /* en el horizontal, el play va abajo; en los verticales, el del medio */
   .vp-tap { cursor: pointer; }
   .vp.v-play:not(.v-ui):not(.r) .vp-tap { cursor: none; }   /* sonando y quieto, el mouse se esconde */
   .vp:not(.r) .vp-bot { padding: 0 12px; }
@@ -652,15 +685,15 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
   .work, .yt-av, .w-av, .sh-av, .ch-av, .w-it, .sh-v, .sh-act, .sh-pan, .sh-info, .chip, .feed.swap { transition: none; animation: none; }
   .thumb img, .w-th img, .stage img, .sh-v img, .yt-av img, .w-av img, .sh-av img, .ch-av img, #canal.in, #trabajos.in, .w-t::after { transition: none; animation: none; }
   .chip-r { scroll-behavior: auto; }
-  dialog.dlg[open]::backdrop, dialog.watch[open] > .panel, dialog.shorts[open] > .sh-feed { animation: none; }
-  .carga, .carga-in { transition: none; }
-  .carga-p::after, .carga-p i { animation: none; }
+  dialog.dlg[open]::before, dialog.watch[open] > .panel, dialog.shorts[open] > .sh-feed { animation: none; }
+  .carga-sk, .carga.out .carga-bar { transition: none; }
+  .carga-bar { animation: none; transform: scaleX(.6); }
 }
 </style>
 </head>
 <body>
-<!-- la pantalla de carga: un play que late con un aro que gira, y el nombre, hasta que la página está lista -->
-<div class="carga" id="carga" aria-hidden="true"><div class="carga-in"><span class="carga-p"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.14v13.72c0 .79.87 1.27 1.54.84l10.78-6.86a1 1 0 0 0 0-1.68L9.54 4.3A1 1 0 0 0 8 5.14z" fill="currentColor"/></svg></i></span><b>Lil Sanguchito</b></div></div>
+<!-- la pantalla de carga: la página en cajitas quietas y una barrita violeta arriba, hasta que está lista -->
+<div class="carga" id="carga" aria-hidden="true"><i class="carga-bar"></i><div class="carga-sk"><div class="sk-ch"><i class="sk-av"></i><div class="sk-t"><i class="sk-n"></i><i class="sk-s"></i><div class="sk-dd"><i></i><i class="m"></i><i class="m"></i><i class="c"></i><i></i><i class="m"></i><i class="m"></i><i class="c"></i></div></div><div class="sk-l"><i></i><i></i><i></i></div></div><div class="sk-cp"><i style="--w:54px"></i><i style="--w:100px"></i><i style="--w:56px"></i><i style="--w:124px"></i><i style="--w:104px"></i><i style="--w:130px"></i><i style="--w:74px"></i><i style="--w:66px"></i><i style="--w:128px"></i><i style="--w:58px"></i><i style="--w:92px"></i></div><div class="sk-gr"><div><i class="sk-th"></i><div class="sk-m"><i class="a"></i><div><i class="t"></i><i class="s"></i></div></div></div><div><i class="sk-th"></i><div class="sk-m"><i class="a"></i><div><i class="t"></i><i class="s"></i></div></div></div><div><i class="sk-th"></i><div class="sk-m"><i class="a"></i><div><i class="t"></i><i class="s"></i></div></div></div><div><i class="sk-th"></i><div class="sk-m"><i class="a"></i><div><i class="t"></i><i class="s"></i></div></div></div><div><i class="sk-th"></i><div class="sk-m"><i class="a"></i><div><i class="t"></i><i class="s"></i></div></div></div><div><i class="sk-th"></i><div class="sk-m"><i class="a"></i><div><i class="t"></i><i class="s"></i></div></div></div></div></div></div>
 
 <div class="page" id="page" tabindex="-1">
 <main id="top" lang="es">
