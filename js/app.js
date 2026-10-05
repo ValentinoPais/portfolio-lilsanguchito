@@ -1654,12 +1654,15 @@
   // ---------------- V2 · los verticales, como Shorts ----------------
   // Uno por pantalla, en el orden de la fila, con el anterior asomando arriba y el siguiente abajo, más
   // oscuros. Se pasan con la rueda (uno por gesto), el dedo, arrastrando con el mouse, las flechas del
-  // teclado o los botones ↑ ↓, y siempre frena en uno. Arranca solo; un toque pausa, como en Shorts. Al lado,
-  // siempre abierta, la descripción con el título, las views y los likes, y el canal. En el celular, como
-  // Shorts: el canal, el título y la descripción sobre el video y los likes y las views a la derecha.
+  // teclado o los botones ↑ ↓, y siempre frena en uno. Arranca solo; un toque pausa, como en Shorts. En la
+  // compu: el reel, la descripción (con el título y el canal; cerrada de entrada) y la columna con los likes,
+  // las views y abrir o cerrar la descripción (en todos a la vez), que con la descripción cerrada queda pegada
+  // al reel. En el celular, como Shorts: el canal, el título y la descripción sobre el video y los likes y las
+  // views a la derecha.
   var SH = { d: $('#dlgShorts'), feed: $('#sh-feed'), items: [], i: -1, mt: 0 };
+  SH.d.classList.add('sd-off');                          // en la compu, la descripción arranca cerrada
   var SB = ownBar(SH.d, function () { var it = SH.items[SH.i]; return it && it.querySelector('.sh-pan .d-txt'); });   // la barra propia: la descripción
-  var ICON = { views: EYE };
+  var ICON = { views: EYE, desc: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4V6a2 2 0 0 1 1-1.73" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 9h8M8 13h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' };
   function shortItem(w) {
     var ch = w.channelId ? channels[w.channelId] : null;
     var av = ch ? '<span class="sh-av"><img src="' + esc(ch.snippet.thumbnails.medium.url) + '" alt="" draggable="false"></span>'
@@ -1668,6 +1671,8 @@
       : '<span class="sh-ch">' + av + '<b>' + esc(w.who) + '</b></span>';
     var acts = (w.likes != null ? '<div class="sh-a"><button class="sh-i" type="button" data-like aria-label="Me gusta">' + HEART + '</button><span>' + abbr(w.likes) + '<span class="sr"> Me gusta</span></span></div>' : '') +
       (w.views != null ? '<div class="sh-a v"><span class="sh-i">' + ICON.views + '</span><span>' + abbr(w.views) + '<span class="sr"> views</span></span></div>' : '');
+    // en la compu, la columna sigue con abrir o cerrar la descripción
+    acts += '<div class="sh-a sh-dt"><button class="sh-i" type="button" data-desc aria-label="Descripción" aria-pressed="' + !SH.d.classList.contains('sd-off') + '">' + ICON.desc + '</button></div>';
     var text = w.desc ? linkify(w.desc) : '';
     var foot = (w.who ? (ch ? '<a class="sd-ch" href="' + esc(chUrl(ch)) + '" target="_blank" rel="noopener">' + av + '<b>' + esc(w.who) + '</b></a>' : '<span class="sd-ch">' + av + '<b>' + esc(w.who) + '</b></span>') : '') +
       actsHTML(w);
@@ -1695,6 +1700,11 @@
     SH.feed.scrollTop = 0;
     shActive(0, true); clearTimeout(shRest); shRest = setTimeout(function () { shActive(shIndex()); }, 300);   // primero se abre; el video, después
     setTimeout(SB, 320);
+  }
+  function shDesc() {                                    // la descripción de al lado, abierta o cerrada: en todos los verticales
+    var off = SH.d.classList.toggle('sd-off');
+    [].forEach.call(SH.d.querySelectorAll('[data-desc]'), function (b) { b.setAttribute('aria-pressed', String(!off)); });
+    setTimeout(SB, 360);
   }
   function shIndex() {                                   // el que quedó en el centro
     var top = SH.feed.scrollTop + SH.mt, best = 0, dd = Infinity;
@@ -1885,7 +1895,7 @@
   (function () {
     var f = SH.feed, drag = null, moved = false;
     f.addEventListener('pointerdown', function (e) {
-      if (e.pointerType !== 'mouse' || e.button !== 0 || e.target.closest('a, .sh-pan, .sh-dx, .vp-bar, .vp-big')) return;
+      if (e.pointerType !== 'mouse' || e.button !== 0 || e.target.closest('a, .sh-pan, .sh-dx, .vp-bar, .vp-big, .sh-act')) return;
       drag = { id: e.pointerId, x: e.clientX, y: e.clientY, top: f.scrollTop, ly: e.clientY, lt: performance.now(), v: 0, on: false, from: SH.i }; moved = false; SH.vdrag = false;
     });
     f.addEventListener('pointermove', function (e) {
@@ -1939,6 +1949,7 @@
     if ((el = t.closest('.yt-v, .w-it-v, .w-views, .sh-a.v'))) return blink(el.querySelector('svg'), false, true);   // las views: el ojo parpadea, con un pop
     if ((el = t.closest('[data-mini]'))) return miniAct(el.dataset.mini);              // el mini reproductor
     if ((el = t.closest('[data-watch]'))) return openWatch(el.dataset.watch, el);   // de la lista del reproductor
+    if ((el = t.closest('[data-desc]'))) return shDesc();                            // la descripción: se abre o se cierra en todos
     if ((el = t.closest('.sh-it:not(.on)'))) return shGo(SH.items.indexOf(el));     // el de abajo (o arriba): pasa a ese
     if (t.closest('.sh-dx')) return;                                                  // leyendo la descripción: no es play
     if ((el = t.closest('.sh-more'))) {                                              // la descripción: se abre y se cierra

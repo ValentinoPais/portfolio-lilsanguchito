@@ -487,6 +487,27 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
 .sh-nav button:disabled { opacity: .3; cursor: default; }
 .sh-nav svg { width: 28px; height: 28px; }
 @media (hover: hover) and (pointer: fine) { .sh-it.on .sh-v { cursor: grab; } }
+.sh-a.sh-dt { display: none; }   /* abrir o cerrar la descripción: solo en la compu */
+@media (min-width: 1000px) {
+  dialog.shorts { --shA: 56px; --shV: min(100dvh - 2 * var(--peek) - 2 * var(--shGap), (100vw - 628px) * 16 / 9, (100vw - 268px) / 2 * 16 / 9); }   /* --shA: la columna de botones (todo entra centrado, sin pisar ↑ ↓) */
+  .sh-it { grid-template-columns: var(--shW) var(--gut) var(--shP) 12px var(--shA); column-gap: 0;
+    margin-left: clamp(var(--gut), (100% - var(--shW) - var(--gut) - var(--shP)) / 2, 100% - var(--shW) - var(--gut) - var(--shP) - 12px - var(--shA) - 64px);   /* abierta: centrados el reel y la descripción; la columna, aparte */
+    transition: margin-left .32s cubic-bezier(.2, .8, .2, 1), grid-template-columns .32s cubic-bezier(.2, .8, .2, 1); }
+  dialog.shorts.sd-off .sh-it { grid-template-columns: var(--shW) 0px 0px 12px var(--shA); margin-left: max(var(--gut), min((100% - var(--shW)) / 2, 100% - var(--shW) - 12px - var(--shA) - 64px)); }   /* cerrada: el reel en el medio y la columna, pegada */
+  .sh-v { grid-column: 1; }
+  .sh-pan { grid-column: 3; min-width: 0; padding-left: 0; padding-right: 0; }   /* la caja mide lo que su lugar: se despliega como una cortina */
+  .sh-pan > :not(.sd-x) { width: calc(var(--shP) - 2 * var(--tx) - 2px); margin-left: var(--tx); }   /* lo de adentro, siempre de su ancho: el texto no se reacomoda */
+  .sh-pan .sd-x { right: auto; left: calc(var(--shP) - 2px - var(--gut) - 36px); }   /* cerrar, en su lugar de siempre (aparece al terminar de desplegarse) */
+  .sh-act { grid-column: 5; display: flex; }
+  .sh-a.sh-dt { display: flex; }
+  .sh-pan .w-acts { display: none; }   /* los likes y las views, en la columna */
+  .sh-it .sh-pan { transition: opacity .25s, visibility .32s; }
+  dialog.shorts.sd-off .sh-pan { opacity: 0; visibility: hidden; pointer-events: none; }
+  dialog.shorts.sd-off .sh-x { display: grid; }   /* sin la descripción, cerrar va arriba a la derecha */
+  .sh-dt .sh-i[aria-pressed="true"] { background: rgba(255, 255, 255, .2); }   /* abierta: el botón, prendido */
+  @media (hover: hover) { .sh-act button.sh-i:hover { background: rgba(255, 255, 255, .24); } }
+  @media (prefers-reduced-motion: reduce) { .sh-it { transition: none; } }
+}
 
 @media (max-width: 1099px) { .feed { --cols: 3; --vis: 5; } dialog.watch .panel { --side: 320px; } }
 @media (max-width: 759px) { .feed { --cols: 2; --vis: 3.4; } .feed > * + * { margin-top: 40px; } .hgrid { gap: 28px var(--gut); } }
@@ -769,6 +790,6 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
 <script src="js/mock-data.js?v=4c72eb1b"></script>
 <script src="js/config.js"></script>
 <script src="js/data.js?v=a2e5fc36"></script>
-<script src="js/app.js?v=e5f27fef"></script>
+<script src="js/app.js?v=66bfda36"></script>
 </body>
 </html>
