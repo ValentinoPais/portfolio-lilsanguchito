@@ -558,6 +558,7 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
    que se ve siempre, fina, en el borde de abajo. Los verticales, como Shorts: en pausa, el
    play en el medio, el único */
 .stage iframe.yt, .sh-v iframe.yt { top: -60px; bottom: auto; height: calc(100% + 120px); }
+.sh-v iframe.yt { top: -140px; height: calc(100% + 280px); }   /* los verticales, con los controles de YouTube: su título y su barra, bien afuera */
 .stage:fullscreen { width: 100%; height: 100%; aspect-ratio: auto; }
 .stage:fullscreen iframe.yt { --fw: min(100vw, 100vh * 16 / 9); left: calc((100vw - var(--fw)) / 2); width: var(--fw); top: calc((100vh - var(--fw) * 9 / 16) / 2 - 60px); height: calc(var(--fw) * 9 / 16 + 120px); }
 .stage iframe, .sh-v iframe { transition: opacity .25s ease; }
@@ -618,7 +619,7 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
 .vp-sk.l span i { border-left: 0; border-right: 9px solid #fff; }
 /* los verticales, como Shorts: en pausa, el play en el medio (sin barrita: la que se ve es la del video, si la trae) */
 .vp.r > .vp-big { padding: 18px; }
-.vp.r.v-paused > .vp-big, .vp.r.v-fresh > .vp-big { opacity: 1; pointer-events: auto; transition: none; }   /* en pausa y apenas arranca o sigue: justo cuando YouTube muestra el suyo */
+.vp.r > .vp-big { display: none; }   /* en los verticales, ningún botón nuestro: solo los de YouTube */
 /* en la compu, como en YouTube */
 @media (hover: hover) and (pointer: fine) {
   .vp-dim { background: linear-gradient(to top, rgba(0, 0, 0, .62), rgba(0, 0, 0, .28) 52px, rgba(0, 0, 0, 0) 124px); }
@@ -790,6 +791,6 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
 <script src="js/mock-data.js?v=4c72eb1b"></script>
 <script src="js/config.js"></script>
 <script src="js/data.js?v=a2e5fc36"></script>
-<script src="js/app.js?v=66bfda36"></script>
+<script src="js/app.js?v=a22f6d1a"></script>
 </body>
 </html>

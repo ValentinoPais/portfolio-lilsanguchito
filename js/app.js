@@ -604,16 +604,16 @@
   // El play es a mano: recién ahí se carga el reproductor de YouTube, Drive o TikTok, en el lugar de la
   // miniatura (al abrir un video se aprieta solo). Un video que su canal no deja insertar se abre en YouTube.
   // Con los datos de ejemplo, un aviso.
-  function embedOf(w, pre) {                         // pre: se carga sin arrancar (el vertical de abajo o de arriba)
+  function embedOf(w, pre, reel) {                   // pre: se carga sin arrancar; reel: un vertical (con los controles de YouTube, que casi no se ven)
     // YouTube, siempre sin sus controles: encima van los nuestros, como los de YouTube (enablejsapi: así los manejan)
-    if (w.yt) return w.embed ? 'https://www.youtube-nocookie.com/embed/' + w.yt + '?autoplay=' + (pre ? 0 : 1) + '&playsinline=1&rel=0&enablejsapi=1&controls=0&fs=0&disablekb=1&iv_load_policy=3' +
+    if (w.yt) return w.embed ? 'https://www.youtube-nocookie.com/embed/' + w.yt + '?autoplay=' + (pre ? 0 : 1) + '&playsinline=1&rel=0&enablejsapi=1&controls=' + (reel ? 1 : 0) + '&fs=0&disablekb=1&iv_load_policy=3' +
       (location.origin && location.origin !== 'null' ? '&origin=' + encodeURIComponent(location.origin) : '') : '';
     if (w.drive) return 'https://drive.google.com/file/d/' + w.drive + '/preview';
     if (w.tt) return 'https://www.tiktok.com/player/v1/' + w.tt + '?autoplay=' + (pre ? 0 : 1) + '&rel=0&loop=1&controls=0&progress_bar=0&play_button=0&volume_control=0&fullscreen_button=0&timestamp=0&music_info=0&description=0&native_context_menu=0&closed_caption=0';
     return '';
   }
   function playHere(btn, stage, w, pre) {
-    var src = LIVE && w ? embedOf(w, pre) : '';
+    var src = LIVE && w ? embedOf(w, pre, stage && stage.classList.contains('sh-v')) : '';
     if (LIVE && w && !src) { if (!pre) window.open(w.out, '_blank', 'noopener'); return; }
     if (!pre && btn) btn.hidden = true;
     if (src) {
@@ -1096,9 +1096,6 @@
     if (!v) return;
     var lv = RP.on || (RP.kind === 'tt' && !!RP.f);
     v.classList.toggle('live', lv); v.classList.toggle('seen', RP.seen || (RP.kind === 'tt' && !!RP.f)); if (lv) v.classList.remove('yield');
-    var box = v.querySelector('.vp'), left = RP.kind === 'yt' && sounds(RP) && !RP.end && RP.fr ? RP.fr + (fine() ? 5200 : 6500) - performance.now() : 0;
-    if (box) box.classList.toggle('v-fresh', left > 0);
-    clearTimeout(paintReel.t); if (left > 0) paintReel.t = setTimeout(paintReel, left + 30);
   }
   // los controles del horizontal, a la vista o no. Sonando, se van solos (con el mouse, si no está sobre la barra de abajo)
   var UIT = 0;
