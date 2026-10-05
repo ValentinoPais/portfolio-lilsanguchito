@@ -645,7 +645,7 @@
     var st = $('#w-stage');
     playHere(this, st, WA.now);
     var f = $('#w-stage iframe'); if (f && WA.now && WA.now.yt) pHook(YT, f, 'yt');   // cómo va, play y pausa (los controles de encima y el mini)
-    clearTimeout(st._y); st._y = setTimeout(function () { if (f && YT.f === f && !YT.on) st.classList.add('yield'); }, 3000);   // si no arrancó solo (el navegador no lo dejó), queda a la vista el play de YouTube
+    if (f && YT.f === f) yieldIf(YT, f, st);          // si el navegador no lo deja arrancar solo, el play de YouTube
     paint(YT);
   });
 
@@ -713,6 +713,7 @@
     var im = $('#w-img');
     if (im.getAttribute('src') !== w.thumb) { im.classList.remove('ok'); im.src = w.thumb; }   // la nueva aparece suave
     $('#w-dur').textContent = w.dur || ''; $('#w-dur').hidden = !w.dur;
+    $('#w-play').classList.toggle('auto', !!(LIVE && embedOf(w)));   // arranca solo: sin el botón
   }
   // los likes (a la izquierda) y las views, en dos píldoras iguales: en el reproductor horizontal y en la
   // descripción de los verticales
@@ -902,7 +903,7 @@
         '<div class="vp-bar" aria-hidden="true"><i class="vp-buf"></i><i class="vp-fill"></i><i class="vp-knob"></i><span class="vp-tip"></span></div>' +
       '</div>') + '</div>';
   }
-  function mk() { return { f: null, kind: '', ok: false, on: false, seen: false, fr: 0, nb: -1, st: -1, t: 0, d: 0, at: 0, rate: 1, vol: 100, muted: false, buf: 0, end: false, since: 0, lp: 0, drag: null, was: false, sync: null, fin: 0 }; }
+  function mk() { return { f: null, kind: '', ok: false, okAt: 0, on: false, seen: false, fr: 0, nb: -1, st: -1, t: 0, d: 0, at: 0, rate: 1, vol: 100, muted: false, buf: 0, end: false, since: 0, lp: 0, drag: null, was: false, sync: null, fin: 0 }; }
   var YT = mk(), RP = mk();
   function pReset(S) { var n = mk(), k; for (k in n) S[k] = n[k]; }
   var sounds = function (S) { return S.ok ? S.st === 1 || S.st === 3 : !!S.f; };   // si no avisa, cuenta como que suena
@@ -975,6 +976,7 @@
       else if (m.type === 'onCurrentTime' && m.value) { S.t = +m.value.currentTime || 0; S.at = now; S.d = +m.value.duration || S.d; }
       else if (m.type === 'onMute') S.muted = !!m.value;
     } else return;
+    if (!S.okAt) S.okAt = now;                        // ya está listo: avisa cómo va
     if (!S.ok) {                                       // el primer aviso: con tu volumen y sin subtítulos, como en YouTube si no los pediste
       S.ok = true;
       if (S.kind === 'yt') post(S.f, 'yt', 'cc');
@@ -1225,9 +1227,11 @@
     if (done) { e.preventDefault(); if (YT.on) ui(true); }
   });
 
-  // Los verticales no se precargan (cada reproductor de YouTube pesa mucho en el celular): cada uno carga recién
-  // cuando queda quieto en pantalla. El que se va queda en pausa por si volvés; los más lejos se descargan.
-  // (reelPre y warm quedan por si algún día se vuelve a precargar)
+  // Los verticales se precargan: con el que está en pantalla ya andando y sin tocar nada, se carga el de abajo (y el
+  // de arriba, si no estaba), escondido y sin sonar; los de YouTube, también el principio del video (arrancan mudos un
+  // instante y se frenan al principio). Así, al pasar, el siguiente arranca al instante. En el celular, recién cuando
+  // el que se ve ya suena, y nunca mientras se desliza: lo pesado, cuando no se está tocando nada. El que se va queda
+  // en pausa por si volvés; los más lejos se descargan.
   var reelFrame = function (it) { return it && it.querySelector('.sh-v iframe'); };
   var kindOf = function (f) { return f.classList.contains('yt') ? 'yt' : f.classList.contains('tt') ? 'tt' : ''; };
   function reelPre(it) {
@@ -1288,9 +1292,21 @@
     f.classList.remove('pre'); v.classList.add('playing'); if (pb) pb.hidden = true;
     reelHook(it); pStart(RP); reelWait(v);
   }
-  function reelWait(v) {                              // si no arranca solo (el navegador no lo dejó), queda a la vista el play de YouTube
+  function reelWait(v) {                              // si el navegador no lo deja arrancar solo, el play de YouTube (yieldIf)
     var f = v.querySelector('iframe');
-    clearTimeout(v._y); v._y = setTimeout(function () { if (f && RP.f === f && !RP.on) v.classList.add('yield'); }, 2500);
+    if (f) yieldIf(RP, f, v);
+  }
+  // Si no arranca solo porque el navegador no lo deja (el reproductor ya está listo y no carga ni suena), queda a la
+  // vista el de YouTube, para tocar su play ahí. Mientras carga, aunque tarde, nunca: sigue la miniatura con la ruedita
+  function yieldIf(S, f, el) {
+    var t0 = performance.now(), dr = !kindOf(f);      // Drive no avisa cómo va: su reproductor queda a la vista enseguida
+    clearTimeout(el._y);
+    (function check() {
+      if (S.f !== f || S.on || !f.isConnected) return;
+      var now = performance.now();
+      if (dr ? now - t0 > 2500 : S.okAt && S.st !== 1 && S.st !== 3 && now - S.okAt > 1500) return el.classList.add('yield');
+      if (now - t0 < 20000) el._y = setTimeout(check, 400);
+    })();
   }
   function closeDesc(it) {                            // la descripción del vertical, cerrada otra vez
     var inf = it.querySelector('.sh-info.open'), mb = it.querySelector('.sh-more');
@@ -1657,7 +1673,7 @@
       actsHTML(w);
     return '<article class="sh-it" data-short="' + w.id + '" aria-label="' + esc(w.title) + '">' +
       '<div class="sh-v"><img src="' + esc(w.thumb) + '" alt="" draggable="false">' +
-      '<button class="play" type="button" aria-label="' + esc('Reproducir “' + w.title + '”') + '"><span>▶</span></button>' +
+      '<button class="play' + (LIVE && embedOf(w) ? ' auto' : '') + '" type="button" aria-label="' + esc('Reproducir “' + w.title + '”') + '"><span>▶</span></button>' +
       '<div class="sh-info">' + who + '<p class="sh-ttl">' + esc(w.title) + '</p>' +
       (text ? '<button class="sh-more" type="button" aria-expanded="false">…más</button><div class="sh-dx">' + text + '</div>' : '') + '</div>' +
       (w.drive ? '' : vpHTML(true)) + '</div>' +
@@ -1712,6 +1728,14 @@
     if (!it) return;
     reelGo(it);                                          // el que queda en pantalla arranca solo
     SH.items.forEach(function (x, k) { if (k < n - 1 || k > n + 1) stopHere(x.querySelector('.sh-v')); });   // los lejos se descargan
+    var q = [n + 1, n - 1];                              // el de abajo y el de arriba, listos (de a uno)
+    clearTimeout(SH.pre); SH.pre = setTimeout(function step() {
+      if (SH.i !== n || !SH.d.open) return;
+      if (HELD || performance.now() - (SH.moved || 0) < 600 || (TOUCH && !(RP.on && sounds(RP)))) { SH.pre = setTimeout(step, 400); return; }   // deslizando (o, en el celular, el de pantalla todavía no suena): después
+      var made = false;
+      while (q.length && !made) made = reelPre(SH.items[q.shift()]);
+      if (q.length) SH.pre = setTimeout(step, made ? 1200 : 0);
+    }, TOUCH ? 1200 : 300);
   }
   function shGo(n, fast) {
     if (n > SH.items.length - 1 && SH.items.length) return SH.d.close();   // después del último: se cierra y queda la página donde estaba

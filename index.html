@@ -284,7 +284,8 @@ dialog.watch .panel:focus, .sh-feed:focus { outline: none; }   /* al abrir, el f
 .stage img { width: 100%; height: 100%; object-fit: cover; }
 .play { position: absolute; inset: 0; display: grid; place-items: center; }
 .play[hidden] { display: none; }   /* escondido de verdad: si no, en pausa asomaba debajo del nuestro y se veían dos */
-.play span { width: 68px; height: 48px; border-radius: 12px; display: grid; place-items: center; background: rgba(11, 11, 10, .72); font-size: 20px; padding-left: 3px; transition: background .2s; }
+.play.auto { display: none; }   /* los que arrancan solos: sin botón (ni un instante al pasar de uno a otro) */
+.play span { width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; background: #141413; box-shadow: 0 2px 14px rgba(0, 0, 0, .35); font-size: 24px; padding-left: 4px; transition: background .2s; }   /* como el play del medio */
 .play:focus-visible span { background: var(--acc); }   /* violeta: solo lo que se toca */
 @media (hover: hover) { .play:hover span { background: var(--acc); } }   /* en el celular no queda pegado después del toque */
 .stage iframe, .sh-v iframe { position: absolute; inset: 0; z-index: 4; width: 100%; height: 100%; border: 0; background: #000; }   /* el reproductor de verdad, encima de la miniatura y de los textos */
@@ -768,6 +769,6 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
 <script src="js/mock-data.js?v=4c72eb1b"></script>
 <script src="js/config.js"></script>
 <script src="js/data.js?v=a2e5fc36"></script>
-<script src="js/app.js?v=3aa8db57"></script>
+<script src="js/app.js?v=e5f27fef"></script>
 </body>
 </html>
