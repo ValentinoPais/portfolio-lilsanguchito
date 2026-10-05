@@ -1760,50 +1760,70 @@
   SH.feed.addEventListener('scrollend', function () { clearTimeout(shRest); shActive(shIndex()); });   // terminó de deslizarse: que suene
   // deslizando el vertical de costado (con el dedo, para un lado o el otro) se cierra, como el horizontal para abajo:
   // sigue al dedo solo el que está en pantalla, difuminándose (los que asoman arriba y abajo quedan quietos), y el fondo se va
-  // aclarando; cuando ya no se ve (en el tramo), soltándolo se cierra y, si no, vuelve. Generoso: un roce de costado
-  // no cuenta, y para arriba o para abajo pasa al otro vertical
+  // aclarando; cuando ya no se ve (en el tramo), soltándolo se cierra y, si no, vuelve. Sigue al dedo desde el primer
+  // pixel; para arriba o para abajo pasa al otro vertical
   (function () {
     var hz = null, swallow = false, last = 0;
     var far = function () { return Math.min(150, innerWidth * .35); };
+    // lo que se va junto con el vertical: los que asoman arriba y abajo y los botones de la ventana (y el fondo)
+    var around = function () { return [SH.items[SH.i - 1], SH.items[SH.i + 1], SH.d.querySelector('.sh-nav'), SH.d.querySelector('.sh-x')].filter(Boolean); };
     SH.feed.addEventListener('pointerdown', function (e) {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       var v = e.target.closest('.sh-it.on .sh-v');     // con el dedo o con el mouse, desde el video
-      if (v) hz = { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, on: false, raf: 0, it: v.closest('.sh-it'), mouse: e.pointerType === 'mouse' };
+      hz = v ? { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, go: false, on: false, raf: 0, it: v.closest('.sh-it'), mouse: e.pointerType === 'mouse' } : null;
     });
     SH.feed.addEventListener('pointermove', function (e) {
       if (!hz || e.pointerId !== hz.id) return;
       var dx = e.clientX - hz.x, ax = Math.abs(dx), ay = Math.abs(e.clientY - hz.y);
       if (!hz.on) {
-        if ((ay > 14 && ay > ax) || SH.vdrag) { hz = null; return; }   // para arriba o para abajo: es el otro vertical
-        if (ax < 24 || ax < ay * 1.6) return;            // un roce no cuenta
-        hz.on = true; hz.x0 = dx > 0 ? 24 : -24; HELD = 1; SH.side = true; SH.d.classList.add('sh-drag');
-        if (hz.mouse) { document.documentElement.classList.add('grabbing'); noSel(); }
-        try { hz.it.setPointerCapture(e.pointerId); } catch (x) {}
-        hz.it.getAnimations().forEach(function (a) { a.cancel(); });
+        if (SH.vdrag) { back(hz); hz = null; return; }   // ya se está pasando al otro vertical
+        if (ax <= ay) { back(hz); if (ay > 10) hz = null; return; }   // más para arriba o para abajo: de costado, nada
+        if (!hz.go) { hz.go = true; SH.d.classList.add('sh-drag'); hz.it.getAnimations().forEach(function (a) { a.cancel(); }); }   // de costado: lo sigue ya
+        if (ax >= 8) {                                  // ya es arrastrarlo (no un toque)
+          hz.on = true; HELD = 1; SH.side = true;
+          if (hz.mouse) { document.documentElement.classList.add('grabbing'); noSel(); }
+          try { hz.it.setPointerCapture(e.pointerId); } catch (x) {}
+        }
       }
-      hz.dx = dx - hz.x0;
+      hz.dx = dx;
       later(hz);
     });
-    function later(k) {                                // una vez por cuadro: el vertical, corrido y difuminado, y el fondo
+    function later(k) {                                // una vez por cuadro: el vertical corrido y él y lo de alrededor, difuminándose
       if (!k.raf) k.raf = requestAnimationFrame(function () {
         k.raf = 0; if (hz !== k && wz !== k) return;
-        k.it.style.transform = 'translateX(' + k.dx.toFixed(1) + 'px)'; k.it.style.opacity = fadeAt(Math.abs(k.dx) / far()).toFixed(3);
-        SH.d.style.setProperty('--bd', Math.max(0, 1 - Math.abs(k.dx) / far()).toFixed(3));   // transparente justo en el tramo
+        var o = Math.max(0, 1 - Math.abs(k.dx) / far()).toFixed(3);   // transparentes, todos a la vez, justo en el tramo
+        k.it.style.transform = 'translateX(' + k.dx.toFixed(1) + 'px)'; k.it.style.opacity = o;
+        around().forEach(function (el) { el.style.opacity = o; });
+        SH.d.style.setProperty('--bd', o);
       });
+    }
+    function reset(k) {
+      k.it.style.transform = ''; k.it.style.opacity = '';
+      around().forEach(function (el) { el.style.opacity = ''; });
+      SH.d.style.removeProperty('--bd'); SH.d.classList.remove('sh-drag');
+    }
+    function back(k) {                                 // se corrió un poquito de costado pero no era eso: vuelve a su lugar
+      if (!k || !k.go) return;
+      if (k.raf) { cancelAnimationFrame(k.raf); k.raf = 0; }
+      var dx = k.dx; k.go = false; k.dx = 0; reset(k);
+      if (Math.abs(dx) > 2 && !still()) k.it.animate([{ transform: 'translateX(' + dx + 'px)' }, { transform: 'none' }], { duration: 100, easing: EASE });
     }
     function end() {
       var k = hz; hz = null;
       if (!k) return;
-      if (k.raf) cancelAnimationFrame(k.raf);
-      if (!k.on) return;
+      if (k.raf) { cancelAnimationFrame(k.raf); k.raf = 0; }
+      if (!k.on) return back(k);                       // un toque (o casi): vuelve y el toque cuenta
       swallow = true; setTimeout(function () { swallow = false; });   // soltarlo no pausa
       if (k.mouse) document.documentElement.classList.remove('grabbing');
       finish(k);
     }
     function finish(k) {                               // al soltar: pasado el tramo, se cierra al toque; si no, vuelve rápido
-      SH.side = false; unheld(); k.it.style.transform = ''; k.it.style.opacity = ''; SH.d.style.removeProperty('--bd'); SH.d.classList.remove('sh-drag');
+      var o = Math.max(0, 1 - Math.abs(k.dx) / far()), els = around();
+      SH.side = false; unheld(); reset(k);
       if (Math.abs(k.dx) >= far()) return SH.d.close();
-      if (!still()) k.it.animate([{ transform: 'translateX(' + k.dx + 'px)', opacity: fadeAt(Math.abs(k.dx) / far()) }, { transform: 'none', opacity: 1 }], { duration: 140, easing: EASE });
+      if (still()) return;
+      k.it.animate([{ transform: 'translateX(' + k.dx + 'px)', opacity: o }, { transform: 'none', opacity: 1 }], { duration: 140, easing: EASE });
+      els.forEach(function (el) { el.animate([{ opacity: o }, { opacity: 1 }], { duration: 140, easing: EASE }); });
     }
     // con el trackpad (o shift y la rueda), de costado: igual que con el dedo; se suelta cuando el gesto termina
     var wz = null;
@@ -1820,7 +1840,7 @@
     };
     SH.feed.addEventListener('pointerup', end); SH.feed.addEventListener('pointercancel', end);
     SH.feed.addEventListener('lostpointercapture', function (e) { if (hz && hz.on && e.target === hz.it && e.pointerId === hz.id) end(); });
-    window.addEventListener('blur', function () { if (hz && hz.on) end(); else hz = null; });
+    window.addEventListener('blur', function () { if (hz && hz.on) end(); else { back(hz); hz = null; } });
     SH.feed.addEventListener('click', function (e) { if (swallow) { swallow = false; e.preventDefault(); e.stopPropagation(); } }, true);
     // y siempre queda uno en el centro: si al terminar de deslizar quedó entre dos (pasa en algunos celulares), se
     // termina de acomodar en el más cercano
@@ -1893,22 +1913,26 @@
     var f = SH.feed, drag = null, moved = false;
     f.addEventListener('pointerdown', function (e) {
       if (e.pointerType !== 'mouse' || e.button !== 0 || e.target.closest('a, .sh-pan, .sh-dx, .vp-bar, .vp-big, .sh-act')) return;
-      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, top: f.scrollTop, ly: e.clientY, lt: performance.now(), v: 0, on: false, from: SH.i }; moved = false; SH.vdrag = false;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, top: f.scrollTop, ly: e.clientY, lt: performance.now(), v: 0, go: false, on: false, from: SH.i }; moved = false; SH.vdrag = false;
     });
     f.addEventListener('pointermove', function (e) {
       if (!drag || e.pointerId !== drag.id) return;
-      var dy = e.clientY - drag.y, now = performance.now();
-      if (!drag.on && SH.side) { drag = null; return; }   // de costado: lo cierra
-      if (!drag.on && Math.abs(dy) > 6 && Math.abs(dy) >= Math.abs(e.clientX - drag.x)) { drag.on = true; SH.vdrag = true; moved = true; f.classList.add('drag'); f.setPointerCapture(e.pointerId); noSel(); }
-      if (!drag.on) return;
+      var dy = e.clientY - drag.y, ax = Math.abs(e.clientX - drag.x), ay = Math.abs(dy), now = performance.now();
+      if (!drag.on) {
+        if (SH.side) { undo(); drag = null; return; }   // de costado: lo cierra
+        if (ay <= ax) { undo(); if (ax > 10) drag = null; return; }   // más de costado: para arriba o abajo, nada
+        if (!drag.go) { drag.go = true; f.classList.add('drag'); }   // para arriba o abajo: lo sigue ya
+        if (ay >= 8) { drag.on = true; SH.vdrag = true; moved = true; f.setPointerCapture(e.pointerId); noSel(); }   // ya es arrastrarlo (no un clic)
+      }
       f.scrollTop = drag.top - dy;
       drag.v = 0.8 * drag.v + 0.2 * ((e.clientY - drag.ly) / Math.max(1, now - drag.lt));   // px por ms
       drag.ly = e.clientY; drag.lt = now;
     });
+    function undo() { if (drag && drag.go) { drag.go = false; f.scrollTop = drag.top; f.classList.remove('drag'); } }   // se movió un poquito y no era eso: vuelve
     function end(e) {
       if (!drag || (e && e.pointerId !== drag.id)) return;
       var d = drag; drag = null;
-      if (!d.on) return;
+      if (!d.on) { if (d.go) { f.scrollTop = d.top; f.classList.remove('drag'); } return; }   // un clic (o casi): vuelve y el clic cuenta
       SH.vdrag = false;
       var dy = e.clientY - d.y, to = d.from;                       // pasa si lo arrastraste un poco o rápido
       if (dy < -60 || d.v < -0.45) to = d.from + 1; else if (dy > 60 || d.v > 0.45) to = d.from - 1;
