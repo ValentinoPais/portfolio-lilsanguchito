@@ -67,62 +67,31 @@
   M.youtube.channels.items.forEach(function (c) { channels[c.id] = c; });
   var chUrl = function (ch) { return 'https://www.youtube.com/' + (ch.snippet.customUrl || 'channel/' + ch.id); };
 
-  // ---------------- los temas de cada video, de YouTube ----------------
-  // videos.list con part=topicDetails trae, en topicCategories, links de Wikipedia que describen de qué
-  // trata el video (siempre de una misma lista corta). Acá van con su nombre en castellano; uno que no
-  // esté en la lista va con su nombre de Wikipedia. Si un video no trae temas, va su categoría de YouTube
-  // (snippet.categoryId), con el mismo nombre que el tema parecido, así no se repiten.
-  var TOPIC = {
-    Video_game_culture: 'Videojuegos', Action_game: 'Juegos de acción', 'Action-adventure_game': 'Acción y aventura',
-    Casual_game: 'Juegos casuales', Music_video_game: 'Juegos de música', Puzzle_video_game: 'Puzles',
-    Racing_video_game: 'Carreras', 'Role-playing_video_game': 'Rol', Simulation_video_game: 'Simulación',
-    Sports_game: 'Juegos de deportes', Strategy_video_game: 'Estrategia',
-    Entertainment: 'Entretenimiento', Humour: 'Humor', Film: 'Cine', Performing_arts: 'Artes escénicas',
-    Television_program: 'Televisión', 'Lifestyle_(sociology)': 'Estilo de vida', Fashion: 'Moda',
-    Physical_fitness: 'Fitness', Food: 'Comida', Hobby: 'Hobbies', Pet: 'Mascotas', Physical_attractiveness: 'Belleza',
-    Technology: 'Tecnología', Tourism: 'Viajes', Vehicle: 'Autos', Society: 'Sociedad', Business: 'Negocios',
-    Health: 'Salud', Military: 'Militar', Politics: 'Política', Religion: 'Religión', Knowledge: 'Conocimiento',
-    Music: 'Música', Christian_music: 'Música cristiana', Classical_music: 'Clásica', Country_music: 'Country',
-    Electronic_music: 'Electrónica', Hip_hop_music: 'Hip hop', Independent_music: 'Indie', Jazz: 'Jazz',
-    Music_of_Asia: 'Música asiática', Music_of_Latin_America: 'Música latina', Pop_music: 'Pop', Reggae: 'Reggae',
-    Rhythm_and_blues: 'R&B', Rock_music: 'Rock', Soul_music: 'Soul', Sport: 'Deportes',
-    Association_football: 'Fútbol', American_football: 'Fútbol americano', Baseball: 'Béisbol', Basketball: 'Básquet',
-    Boxing: 'Boxeo', Cricket: 'Críquet', Golf: 'Golf', Ice_hockey: 'Hockey', Mixed_martial_arts: 'MMA',
-    Motorsport: 'Automovilismo', Professional_wrestling: 'Lucha libre', Tennis: 'Tenis', Volleyball: 'Vóley'
-  };
-  var CAT = { 1: 'Cine', 2: 'Autos', 10: 'Música', 15: 'Mascotas', 17: 'Deportes', 19: 'Viajes', 20: 'Videojuegos',
-    22: 'Vlogs', 23: 'Humor', 24: 'Entretenimiento', 25: 'Noticias', 26: 'Tutoriales', 27: 'Educación',
-    28: 'Tecnología', 29: 'Causas' };
-  function topicsOf(v) {
-    var t = ((v.topicDetails && v.topicDetails.topicCategories) || []).map(function (u) {
-      var k = String(u).split('/wiki/')[1] || '';
-      try { k = decodeURIComponent(k); } catch (e) {}
-      return TOPIC[k] || k.replace(/_/g, ' ').replace(/\s*\(.*\)$/, '');
-    }).filter(Boolean);
-    if (!t.length && CAT[v.snippet.categoryId]) t = [CAT[v.snippet.categoryId]];
-    return t.filter(function (x, i) { return t.indexOf(x) === i; });
-  }
-
-  // los tags de la planilla: la pestaña Tags (la lista, en el orden de los botones) y, en Trabajos, la columna
-  // Tags de cada video ("Humor, Vlogs", como los guarda el desplegable de varios). Un video con tags va solo
-  // con esos; sin tags, con los de YouTube (y los verticales, además, con Reel); si no le queda ninguno, con Otros:
-  // ninguno queda sin tag.
-  // Escritos a mano con otras mayúsculas, quedan como en la pestaña Tags.
-  var OTROS = 'Otros', REEL = 'Reel', TAGS = [], CANON = {};
+  // ---------------- los tags, los de la planilla ----------------
+  // La pestaña Tags: todos los tags, en el orden de los botones, cada uno con su casilla Activo (destildado, ese
+  // tag no aparece en ningún lado, sin borrarlo). En Trabajos, la columna Tags de cada video ("Humor, Vlogs", como
+  // los guarda el desplegable de varios): cada video va solo con los suyos; sin tags, aparece solo en Todo. Reel
+  // es automático: lo llevan todos los verticales y solo ellos (no hace falta ponérselo). Escritos a mano con
+  // otras mayúsculas, quedan como en la pestaña Tags.
+  var TAGS = [], CANON = {}, OFF = {};
+  ((M.sheet && M.sheet.off) || []).forEach(function (t) { OFF[String(t || '').trim().toLowerCase()] = 1; });
   ((M.sheet && M.sheet.tags) || []).forEach(function (t) {
     t = String(t || '').trim(); var k = t.toLowerCase();
-    if (t && !CANON[k]) { CANON[k] = t; TAGS.push(t); }
+    if (t && !CANON[k]) { CANON[k] = t; if (!OFF[k]) TAGS.push(t); }
   });
   var canon = function (t) { return CANON[t.toLowerCase()] || t; };
+  var isReel = function (t) { return /^reels?$/i.test(t); };
+  var REEL = TAGS.filter(isReel)[0] || (Object.keys(CANON).some(isReel) ? '' : 'Reel');   // como está en la pestaña Tags; destildado, ninguno
   function tagsOf(s) {
-    var t = String(s || '').split(',').map(function (x) { return canon(x.trim()); }).filter(Boolean);
+    var t = String(s || '').split(',').map(function (x) { return canon(x.trim()); })
+      .filter(function (x) { return x && !OFF[x.toLowerCase()] && !isReel(x); });   // los activos (Reel va solo)
     return t.filter(function (x, i) { return t.indexOf(x) === i; });
   }
 
   var works = [];
   M.sheet.trabajos.forEach(function (r, i) {
     var link = r[0], L, w;
-    // columnas de Trabajos: Link, Título, Cliente, Mostrar y Tags
+    // columnas de Trabajos: Link, Título, Cliente, Mostrar, Tags y Pinneado
     if (!link || r[3] === 'FALSE' || r[3] === false) return;   // columna Mostrar destildada
     L = parseLink(link);
     w = { id: 'w' + i, i: i, client: r[2] || '' };
@@ -140,7 +109,6 @@
       w.dur = w.vertical ? '' : dur(v.contentDetails && v.contentDetails.duration);
       w.desc = v.snippet.description || '';        // la descripción original, tal como está en YouTube
       w.out = LIVE ? 'https://www.youtube.com/' + (L.short ? 'shorts/' : 'watch?v=') + L.id : ch ? chUrl(ch) : 'https://www.youtube.com/'; w.outLabel = 'Ver en YouTube ↗';
-      w.topics = topicsOf(v);                       // de qué trata, según YouTube: para los temas de arriba
     } else if (L.kind === 'tiktok') {
       var t = M.tiktok[link] || {};
       w.title = r[1] || t.title || 'TikTok'; w.who = r[2] || t.author_name || ''; w.views = null; w.thumb = t.thumbnail_url; w.vertical = true;
@@ -152,10 +120,8 @@
       w.vertical = f.height > f.width; w.drive = L.id;
       w.out = LIVE ? 'https://drive.google.com/file/d/' + L.id + '/view' : DRIVE; w.outLabel = 'Ver en Drive ↗';
     } else return;
-    var own = tagsOf(r[4]);                            // con tags en la planilla: solo esos
-    if (own.length) { w.topics = own; w.own = true; }
-    else w.topics = (w.vertical ? [REEL] : []).concat(w.topics || []).map(canon).filter(function (x, i, a) { return a.indexOf(x) === i; });   // sin tags: los de YouTube y, si es vertical, Reel
-    if (!w.topics.length) w.topics = [canon(OTROS)];
+    w.topics = (w.vertical && REEL ? [REEL] : []).concat(tagsOf(r[4]));   // los suyos (y Reel, si es vertical); sin ninguno, solo en Todo
+    w.pin = r[5] === 'TRUE' || r[5] === true;          // Pinneado: siempre primero
     works.push(w);
   });
   var byId = {};
@@ -363,11 +329,12 @@
 
   // ---------------- los videos, como el inicio de YouTube ----------------
   // Al entrar se ven los videos, sin títulos ni números arriba. Un solo feed: dos filas de horizontales,
-  // una fila infinita de verticales, dos filas más y así. Se ordenan solos, de más a menos views; los que
-  // no tienen views (Drive y TikTok) van al final, en el orden de la planilla.
+  // una fila infinita de verticales, dos filas más y así. Primero, los pinneados, en el orden de la planilla;
+  // después, de más a menos views; los que no tienen views (Drive y TikTok), al final, en el orden de la planilla.
   var byViews = function (a, b) { return (b.views == null ? -1 : b.views) - (a.views == null ? -1 : a.views) || a.i - b.i; };
-  var hs = works.filter(function (w) { return !w.vertical; }).sort(byViews);
-  var vs = works.filter(function (w) { return w.vertical; }).sort(byViews);
+  var byPin = function (a, b) { return (b.pin ? 1 : 0) - (a.pin ? 1 : 0) || (a.pin ? a.i - b.i : byViews(a, b)); };
+  var hs = works.filter(function (w) { return !w.vertical; }).sort(byPin);
+  var vs = works.filter(function (w) { return w.vertical; }).sort(byPin);
 
   var feed = $('#all'), built = '', undo = [], topic = '';   // topic: el tema elegido arriba ('' = Todo)
   var inTopic = function (w) { return !topic || (w.topics || []).indexOf(topic) >= 0; };
@@ -398,30 +365,13 @@
   window.addEventListener('resize', layout);
 
   // ---------------- los tags, entre el canal y los videos ----------------
-  // Como los del inicio de YouTube: primero Todo y después los tags de los videos (los de la planilla o, en los
-  // que no tienen, los de YouTube). Primero los de la pestaña Tags, en su orden (los que tienen algún video);
-  // después los otros puestos en la planilla y después los de YouTube, de los que más videos tienen a los que
-  // menos (a igual cantidad, el del video con más views primero): de esos, los que tienen al menos dos videos
-  // (si así quedan menos de tres, también los de uno), hasta completar 12, y no uno que tengan todos, porque
-  // sería lo mismo que Todo. Si así algún video se queda sin botón, se suma el más común de los suyos. Tocando
-  // uno, quedan solo sus videos. Se deslizan con el dedo o el mouse y, si no entran todos, avanzan solos.
-  function topicsFor(pool) {                         // los tags de un grupo de videos, con esas reglas
-    var count = {}, seen = [], own = {};
-    pool.slice().sort(byViews).forEach(function (w) {
-      (w.topics || []).forEach(function (t) { if (!count[t]) { count[t] = 0; seen.push(t); } count[t]++; if (w.own) own[t] = 1; });
-    });
-    var byCount = function (a, b) { return count[b] - count[a] || seen.indexOf(a) - seen.indexOf(b); };
-    var list = TAGS.filter(function (t) { return count[t]; })                                         // los de la pestaña Tags
-      .concat(seen.filter(function (t) { return own[t] && TAGS.indexOf(t) < 0; }).sort(byCount));      // los demás de la planilla
-    var auto = seen.filter(function (t) { return list.indexOf(t) < 0 && count[t] < pool.length; });   // los de YouTube
-    var min = auto.filter(function (t) { return count[t] >= 2; }).length >= 3 ? 2 : 1;
-    list = list.concat(auto.filter(function (t) { return count[t] >= min; }).sort(byCount).slice(0, Math.max(0, 12 - list.length)));
-    pool.forEach(function (w) {                        // ningún video sin botón
-      var t = w.topics || [];
-      if (t.some(function (x) { return list.indexOf(x) >= 0 || count[x] >= pool.length; })) return;
-      if (t.length) list.push(t.slice().sort(byCount)[0]);
-    });
-    return list;
+  // Como los del inicio de YouTube: primero Todo y después los tags activos que tienen algún video, en el orden
+  // de la pestaña Tags (y al final, los escritos a mano que no están en la lista). Tocando uno, quedan solo sus
+  // videos. Se deslizan con el dedo o el mouse y, si no entran todos, avanzan solos.
+  function topicsFor(pool) {
+    var has = {}, extra = [];
+    pool.forEach(function (w) { (w.topics || []).forEach(function (t) { has[t] = 1; if (TAGS.indexOf(t) < 0 && extra.indexOf(t) < 0) extra.push(t); }); });
+    return TAGS.filter(function (t) { return has[t]; }).concat(extra);
   }
   // una fila de temas: Todo y los temas. pick(t) al tocar uno; set(t) marca uno desde afuera
   function chipRow(box, row, list, pick) {
@@ -537,13 +487,6 @@
   }
   var EASE = 'cubic-bezier(.2, .8, .2, 1)';
   var still = function () { return matchMedia('(prefers-reduced-motion: reduce)').matches; };
-  function hush(S) {                                  // frena el video mientras se arrastra (sin mostrar nada): avisa si sonaba
-    if (!TOUCH || !S.f || !S.kind || !sounds(S) || S.end) return false;
-    post(S.f, S.kind, 'pause'); return true;
-  }
-  function wake(S, f) {                               // al soltar: que siga (si sigue siendo el mismo video)
-    if (S.f && S.f === f) pCmd(S, 'play');
-  }
   var fadeAt = function (p) { return Math.max(.25, 1 - .6 * Math.max(0, p)); };   // lo que se arrastra para irse se va difuminando: justo en el tramo, al 40 %
   var full = new Intl.NumberFormat('es-AR');
   var linkify = function (s) { return esc(s).replace(/https?:\/\/[^\s<]+/g, function (u) { return '<a href="' + u + '" target="_blank" rel="noopener">' + u + '</a>'; }); };
@@ -719,7 +662,7 @@
   // La pila llega ordenada de más a menos views.
   function mix(cur, pool) {
     var me = creator(cur), mine = [], rest = [], out = [cur], used = {}, turn = 1;
-    pool.forEach(function (v) { if (v !== cur) (creator(v) === me ? mine : rest).push(v); });
+    pool.forEach(function (v) { if (v === cur) return; if (v.pin) out.push(v); else (creator(v) === me ? mine : rest).push(v); });   // los pinneados, enseguida
     while (mine.length || rest.length) {
       if ((turn && mine.length) || !rest.length) out.push(mine.shift());
       else {
@@ -959,7 +902,7 @@
         '<div class="vp-bar" aria-hidden="true"><i class="vp-buf"></i><i class="vp-fill"></i><i class="vp-knob"></i><span class="vp-tip"></span></div>' +
       '</div>') + '</div>';
   }
-  function mk() { return { f: null, kind: '', ok: false, on: false, seen: false, st: -1, t: 0, d: 0, at: 0, rate: 1, vol: 100, muted: false, buf: 0, end: false, since: 0, lp: 0, drag: null, was: false, sync: null, fin: 0 }; }
+  function mk() { return { f: null, kind: '', ok: false, on: false, seen: false, fr: 0, nb: -1, st: -1, t: 0, d: 0, at: 0, rate: 1, vol: 100, muted: false, buf: 0, end: false, since: 0, lp: 0, drag: null, was: false, sync: null, fin: 0 }; }
   var YT = mk(), RP = mk();
   function pReset(S) { var n = mk(), k; for (k in n) S[k] = n[k]; }
   var sounds = function (S) { return S.ok ? S.st === 1 || S.st === 3 : !!S.f; };   // si no avisa, cuenta como que suena
@@ -999,7 +942,8 @@
     if (a === 'seek') { S.t = v; S.at = now; S.lp = 0; if (v < S.d - 1) S.end = false; }
     else if (a === 'play' || a === 'pause') {          // se ve al toque, sin esperar el aviso
       S.t = tNow(S); S.at = now; S.st = a === 'play' ? 1 : 2; S.ok = S.ok || S.kind === 'tt';
-      if (a === 'play') { S.end = false; S.since = now; }
+      if (a === 'play') { S.end = false; S.since = now; if (S.nb !== 1) S.fr = now; }
+      S.nb = S.st;
     } else if (a === 'mute' || a === 'unmute') S.muted = a === 'mute';
     else if (a === 'vol') S.vol = v;
     paint(S);
@@ -1038,13 +982,14 @@
       if (PREF.muted) { post(S.f, S.kind, 'mute'); S.muted = true; }
     }
     if (st !== S.st) {
-      if (st === 1) { S.since = now; if (!S.on && S.kind === 'yt') post(S.f, 'yt', 'cc'); }
+      if (st === 1) { S.since = now; if (S.nb !== 1) S.fr = now; if (!S.on && S.kind === 'yt') post(S.f, 'yt', 'cc'); }
       S.st = st;
+      if (st !== 3) S.nb = st;                         // lo último que hizo, sin contar cuando carga un poco
     }
     if (st === 1 || st === 3) { S.on = true; if (S.t < S.d - 1) S.end = false; }   // ya arrancó: desde ahora se maneja con los de encima
     if (S.st === 1 && S.t > .05) S.seen = true;      // y ya se ve la imagen: recién ahí aparece el video
     if (st === 0) {                                    // terminó (si no se llegó a frenar antes)
-      if (S === RP) { post(S.f, S.kind, 'seek', 0); post(S.f, S.kind, 'play'); S.st = 1; S.t = 0; S.at = now; }   // el vertical vuelve a empezar
+      if (S === RP) { post(S.f, S.kind, 'seek', 0); post(S.f, S.kind, 'play'); S.st = 1; S.t = 0; S.at = now; S.fr = now; S.nb = 1; }   // el vertical vuelve a empezar (YouTube muestra su pausa)
       else { S.end = true; S.t = S.d; }
     }
     nearEnd(S);
@@ -1149,6 +1094,9 @@
     if (!v) return;
     var lv = RP.on || (RP.kind === 'tt' && !!RP.f);
     v.classList.toggle('live', lv); v.classList.toggle('seen', RP.seen || (RP.kind === 'tt' && !!RP.f)); if (lv) v.classList.remove('yield');
+    var box = v.querySelector('.vp'), left = RP.kind === 'yt' && sounds(RP) && !RP.end && RP.fr ? RP.fr + (fine() ? 5200 : 6500) - performance.now() : 0;
+    if (box) box.classList.toggle('v-fresh', left > 0);
+    clearTimeout(paintReel.t); if (left > 0) paintReel.t = setTimeout(paintReel, left + 30);
   }
   // los controles del horizontal, a la vista o no. Sonando, se van solos (con el mouse, si no está sobre la barra de abajo)
   var UIT = 0;
@@ -1508,7 +1456,6 @@
         if (Math.abs(dy) < 10 || Math.abs(dx) > Math.abs(dy)) return;
         if (dy < 0) { g.up = stacked() && dy < -40; return; }   // para arriba (en el celular): pantalla completa, al soltar
         g.on = true; g.free = !stacked(); HELD = 1; ui(false); panel.style.willChange = 'transform, opacity'; panel.classList.add('w-drag');
-        g.f = YT.f; g.hushed = hush(YT);
         try { stage.setPointerCapture(e.pointerId); } catch (x) {}
         panel.getAnimations().forEach(function (x) { x.cancel(); });
         if (g.free) { document.documentElement.classList.add('grabbing'); noSel(); }   // en la compu, la ventana entera sigue al mouse
@@ -1582,7 +1529,6 @@
       if (!k) return;
       if (k.on) unheld();
       if (k.raf) cancelAnimationFrame(k.raf);
-      if (k.on && k.hushed) wake(YT, k.f);            // el video sigue: achicado, de vuelta en su lugar o en pantalla completa
       if (!k.on) {
         if (e.type !== 'pointerup') return;
         if (k.up && !fsEl()) { if (YT.on) ui(false); return fsToggle(); }   // deslizando para arriba: pantalla completa
@@ -1800,7 +1746,6 @@
         if ((ay > 14 && ay > ax) || SH.vdrag) { hz = null; return; }   // para arriba o para abajo: es el otro vertical
         if (ax < 24 || ax < ay * 1.6) return;            // un roce no cuenta
         hz.on = true; hz.x0 = dx > 0 ? 24 : -24; HELD = 1; SH.side = true; SH.d.classList.add('sh-drag');
-        hz.f = RP.f; hz.hushed = hush(RP);
         if (hz.mouse) { document.documentElement.classList.add('grabbing'); noSel(); }
         try { hz.it.setPointerCapture(e.pointerId); } catch (x) {}
         hz.it.getAnimations().forEach(function (a) { a.cancel(); });
@@ -1827,7 +1772,6 @@
     function finish(k) {                               // al soltar: pasado el tramo, se cierra al toque; si no, vuelve rápido
       SH.side = false; unheld(); k.it.style.transform = ''; k.it.style.opacity = ''; SH.d.style.removeProperty('--bd'); SH.d.classList.remove('sh-drag');
       if (Math.abs(k.dx) >= far()) return SH.d.close();
-      if (k.hushed) wake(RP, k.f);                    // vuelve: el video sigue
       if (!still()) k.it.animate([{ transform: 'translateX(' + k.dx + 'px)', opacity: fadeAt(Math.abs(k.dx) / far()) }, { transform: 'none', opacity: 1 }], { duration: 140, easing: EASE });
     }
     // con el trackpad (o shift y la rueda), de costado: igual que con el dedo; se suelta cuando el gesto termina

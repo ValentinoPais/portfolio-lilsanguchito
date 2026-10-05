@@ -30,8 +30,8 @@ window.loadSiteData = (function () {
     return Object.keys(o).filter(function (k) { return o[k] != null && o[k] !== ''; })
       .map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(o[k]); }).join('&');
   }
-  function get(url) {
-    return fetch(url).then(function (r) {
+  function get(url, opt) {
+    return fetch(url, opt).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (b) {
         if (r.ok) return b;
         var e = new Error((b && b.error && b.error.message) || 'HTTP ' + r.status);
@@ -42,7 +42,8 @@ window.loadSiteData = (function () {
   function chunks(a, n) { var out = []; for (var i = 0; i < a.length; i += n) out.push(a.slice(i, i + n)); return out; }
   function unique(a) { return a.filter(function (x, i) { return x && a.indexOf(x) === i; }); }
   var str = function (v) { return String(v == null ? '' : v).trim(); };
-  var hidden = function (v) { return v === false || /^(false|falso|no)$/i.test(str(v)); };   // la casilla Mostrar, destildada
+  var hidden = function (v) { return v === false || /^(false|falso|no)$/i.test(str(v)); };   // una casilla destildada (Mostrar, Activo)
+  var ticked = function (v) { return v === true || /^(true|verdadero|sí|si|x)$/i.test(str(v)); };   // una casilla tildada (Pinneado)
 
   function parseLink(url) {                          // el mismo que usa la web (app.js)
     var m;
@@ -56,12 +57,12 @@ window.loadSiteData = (function () {
   // ---------------- la planilla: Trabajos, Tags y Config ----------------
   function range(r) {
     return get('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(G.sheetId) + '/values/' + encodeURIComponent(r) + '?' +
-      qs({ valueRenderOption: 'UNFORMATTED_VALUE', key: G.apiKey })).then(function (b) { return b.values || []; });
+      qs({ valueRenderOption: 'UNFORMATTED_VALUE', key: G.apiKey }), { cache: 'no-store' }).then(function (b) { return b.values || []; });   // siempre la de ahora, nunca una guardada
   }
   function readSheet() {
     var c = load('sheet');                           // lo último que se leyó: solo si Google no responde
-    return Promise.all([range('Trabajos!A2:E'), range('Config!A2:C').catch(function () { return null; }),   // sin pestaña Config: la de ejemplo
-      range('Tags!A2:A').catch(function () { return null; })])                                                   // sin pestaña Tags: los tags quedan en el orden de los videos
+    return Promise.all([range('Trabajos!A2:F'), range('Config!A2:C').catch(function () { return null; }),   // sin pestaña Config: la de ejemplo
+      range('Tags!A2:B').catch(function () { return null; })])                                                   // sin pestaña Tags: los tags quedan en el orden de los videos
       .then(function (r) { var v = { trabajos: r[0], config: r[1], tags: r[2] }; save('sheet', { t: Date.now(), v: v }); return v; })
       .catch(function (e) { if (c) return c.v; throw e; });
   }
@@ -161,9 +162,11 @@ window.loadSiteData = (function () {
   // ---------------- todo junto ----------------
   function live() {
     return readSheet().then(function (S) {
-      // Trabajos: Link, Título, Cliente, Mostrar y Tags (los del desplegable, separados por comas)
-      var rows = (S.trabajos || []).map(function (r) { return [str(r[0]), str(r[1]), str(r[2]), hidden(r[3]) ? 'FALSE' : 'TRUE', typeof r[4] === 'string' ? str(r[4]) : '']; });   // en Tags, lo que no es texto (un FALSE de una casilla) no cuenta
-      var tags = unique((S.tags || []).map(function (r) { return str(r[0]); }));   // la pestaña Tags: un tag por fila
+      // Trabajos: Link, Título, Cliente, Mostrar, Tags (los del desplegable, separados por comas) y Pinneado
+      var rows = (S.trabajos || []).map(function (r) { return [str(r[0]), str(r[1]), str(r[2]), hidden(r[3]) ? 'FALSE' : 'TRUE', typeof r[4] === 'string' ? str(r[4]) : '', ticked(r[5]) ? 'TRUE' : '']; });   // en Tags, lo que no es texto (un FALSE de una casilla) no cuenta
+      // la pestaña Tags: un tag por fila, con su casilla Activo (sin casilla, cuenta como activo)
+      var trows = (S.tags || []).map(function (r) { return [str(r[0]), hidden(r[1])]; }).filter(function (r) { return r[0]; });
+      var tags = unique(trows.map(function (r) { return r[0]; })), off = unique(trows.filter(function (r) { return r[1]; }).map(function (r) { return r[0]; }));
       var shown = rows.filter(function (r) { return r[0] && r[3] !== 'FALSE'; }).map(function (r) { return parseLink(r[0]); });
       var ids = function (k) { return unique(shown.filter(function (L) { return L.kind === k; }).map(function (L) { return L.id; })); };
       var vIds = ids('yt'), dIds = ids('drive'), tUrls = ids('tiktok');
@@ -185,7 +188,7 @@ window.loadSiteData = (function () {
           dIds.forEach(function (id, i) { files[id] = r[2][i]; });
           tUrls.forEach(function (u, i) { tk[u] = r[3][i]; });
           if (dIds.some(function (id) { return files[id].error; })) warn.push('Hay archivos del Drive sin compartir');
-          return { live: true, warn: warn.join(' · '), sheet: { trabajos: rows, tags: tags }, config: cfg,
+          return { live: true, warn: warn.join(' · '), sheet: { trabajos: rows, tags: tags, off: off }, config: cfg,
             youtube: { videos: { items: videos }, channels: { items: chs }, self: self ? self.id : '' }, drive: { files: files }, tiktok: tk };
         });
       });

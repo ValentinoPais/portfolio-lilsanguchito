@@ -556,8 +556,9 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
 .vp-big, .vp-row { pointer-events: none; }
 .vp.v-ui > .vp-dim, .vp.v-ui .vp-row, .vp.v-ui .vp-knob { opacity: 1; }
 .vp.v-ui .vp-row { pointer-events: auto; }
-.vp:not(.r).v-ui.v-live > .vp-big, .vp.v-ui.v-paused > .vp-big, .vp.v-ui.v-end > .vp-big { opacity: 1; pointer-events: auto; }   /* con los controles: el play o la pausa, siempre el nuestro */   /* el play del medio, solo en pausa: sonando, el del medio es el de YouTube */
-.vp-big { position: absolute; z-index: 7; left: 50%; top: 50%; width: 72px; height: 72px; margin: -36px 0 0 -36px; padding: 17px; border-radius: 50%; background: rgba(0, 0, 0, .7); }   /* tapa al de YouTube */
+.vp:not(.r).v-ui.v-live > .vp-big, .vp.v-ui.v-paused > .vp-big, .vp.v-ui.v-end > .vp-big { opacity: 1; pointer-events: auto; transition: none; }   /* con los controles: el play o la pausa, siempre el nuestro */   /* el play del medio, solo en pausa: sonando, el del medio es el de YouTube */
+.vp > .vp-big { position: absolute; z-index: 7; left: 50%; top: 50%; width: 72px; height: 72px; margin: -36px 0 0 -36px; padding: 17px; border-radius: 50%; background: #141413; box-shadow: 0 2px 14px rgba(0, 0, 0, .35); }   /* opaco: tapa entero al de YouTube (que está debajo) */
+.stage:fullscreen .vp-big { width: 88px; height: 88px; margin: -44px 0 0 -44px; padding: 21px; }   /* en pantalla completa, el de YouTube es más grande */
 .vp-spin { position: absolute; z-index: 6; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border: 3px solid rgba(255, 255, 255, .25); border-top-color: #fff; border-radius: 50%; display: none; animation: vp-spin .8s linear infinite; pointer-events: none; }
 @keyframes vp-spin { to { transform: rotate(360deg); } }
 .stage.playing:not(.seen) .vp-spin, .sh-v.playing:not(.seen) .vp-spin { display: block; animation: vp-spin .8s linear infinite, fade-in .25s ease .6s both; }   /* el circulito, solo si tarda */
@@ -594,9 +595,8 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
 .vp-sk span i { width: 0; height: 0; border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 9px solid #fff; }
 .vp-sk.l span i { border-left: 0; border-right: 9px solid #fff; }
 /* los verticales, como Shorts: en pausa, el play en el medio (sin barrita: la que se ve es la del video, si la trae) */
-.vp.r > .vp-big { width: 72px; height: 72px; margin: -36px 0 0 -36px; padding: 18px; background: rgba(0, 0, 0, .45); }
-@media (hover: none) { .sh-v:has(> iframe.yt) > .vp.r > .vp-big { display: none; } }   /* en el celular, el de YouTube: uno solo */
-.vp.r.v-paused > .vp-big { opacity: 1; pointer-events: auto; }
+.vp.r > .vp-big { padding: 18px; }
+.vp.r.v-paused > .vp-big, .vp.r.v-fresh > .vp-big { opacity: 1; pointer-events: auto; transition: none; }   /* en pausa y apenas arranca o sigue: justo cuando YouTube muestra el suyo */
 /* en la compu, como en YouTube */
 @media (hover: hover) and (pointer: fine) {
   .vp-dim { background: linear-gradient(to top, rgba(0, 0, 0, .62), rgba(0, 0, 0, .28) 52px, rgba(0, 0, 0, 0) 124px); }
@@ -764,9 +764,10 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/js/fontawesome.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/js/brands.min.js" defer></script>
-<script src="js/mock-data.js"></script>
+<!-- cada archivo con su versión (?v=): así, después de subir cambios, el navegador no usa uno viejo guardado -->
+<script src="js/mock-data.js?v=4c72eb1b"></script>
 <script src="js/config.js"></script>
-<script src="js/data.js"></script>
-<script src="js/app.js"></script>
+<script src="js/data.js?v=a2e5fc36"></script>
+<script src="js/app.js?v=3aa8db57"></script>
 </body>
 </html>
