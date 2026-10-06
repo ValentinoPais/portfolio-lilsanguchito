@@ -50,7 +50,7 @@ body { margin: 0; height: 100%; position: relative; overflow: hidden; background
 .sbar-k { position: absolute; top: 0; right: 3px; width: 6px; min-height: 36px; border-radius: 3px; background: rgba(236, 234, 228, .2); transition: width .15s, background-color .2s, opacity .3s; will-change: transform; }
 .sbar.on .sbar-k { background: rgba(236, 234, 228, .32); }
 @media (hover: hover) { .sbar:hover .sbar-k, .sbar.drag .sbar-k { width: 8px; background: rgba(236, 234, 228, .5); } }
-@media (hover: none) { .sbar { pointer-events: none; } .sbar-k { opacity: 0; } .sbar.on .sbar-k { opacity: 1; } }
+@media (hover: none) { .sbar { pointer-events: none; } .sbar-k { opacity: 0; } .sbar.on .sbar-k, .sbar.keep .sbar-k { opacity: 1; } }   /* keep: la de la descripción encima del vertical, siempre a la vista */
 a { color: inherit; text-decoration: none; }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
 img { display: block; max-width: 100%; }
@@ -192,7 +192,7 @@ a.w-chl::before, a.sd-ch::before { content: ""; position: absolute; inset: calc(
   .work:hover, .w-it:not(.now):hover { background: var(--hl); box-shadow: 0 0 0 var(--gut) var(--hl); }   /* la tarjeta entera, más clara */
   .work:has(.yt-av:hover) { background: transparent; box-shadow: none; }   /* sobre la foto del canal, solo la foto */
   a.w-chl:has(.w-av:hover)::before, a.sd-ch:has(.sh-av:hover)::before { opacity: 0; }
-  .track.dragging .work:hover, html.grabbing .work:hover, .w-list.dragging .w-it:hover { background: transparent; box-shadow: none; }   /* arrastrando, nada */
+  .track.dragging .work:hover, .w-list.dragging .w-it:hover { background: transparent; box-shadow: none; }   /* arrastrando, nada */
   .x:hover { background: var(--hl); }
   .sh-it:not(.on) .sh-v:hover { filter: brightness(.75); }
 }
@@ -255,6 +255,7 @@ a.yt-ch:hover, a.yt-ch:focus-visible { color: var(--text); }
 .track { position: relative; display: grid; grid-auto-flow: column; gap: var(--gut); overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-y; scrollbar-width: none; align-items: start; padding: 16px var(--gut); margin: -16px calc(-1 * var(--gut)); scroll-padding-inline: var(--gut); }   /* de borde a borde */
 .track::-webkit-scrollbar { display: none; }
 .track { will-change: transform; }   /* el pedacito de píxel que el scroll no acepta lo corre la fila entera (app.js): suave y liviano */
+.page.still .track { will-change: auto; }   /* con una ventana abierta, las filas están quietas: sin capa propia, lo que se mueve en la ventana va más liviano */
 /* sin imán en ningún lado: la fila anda sola todo el tiempo (con imán, en el celular no podía avanzar) */
 .track.dragging { cursor: grabbing; user-select: none; }
 .track.dragging .work { cursor: grabbing; }
@@ -294,10 +295,13 @@ dialog.watch .panel:focus, .sh-feed:focus { outline: none; }   /* al abrir, el f
 @keyframes pop-in { from { opacity: 0; transform: translateY(10px) scale(.99); } }
 @keyframes fade-in { from { opacity: 0; } }
 dialog.dlg[open]::before { animation: fade-in .22s ease-out; }
+dialog.shorts::before { display: none; }   /* los verticales, con su fondo propio: igual a la vista, pero aclararlo mientras se desliza el vertical no recalcula la ventana entera */
+.sh-bd { position: fixed; inset: 0; z-index: -1; pointer-events: none; will-change: opacity; transition: opacity .14s; background: var(--shade); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+dialog.shorts[open] > .sh-bd { animation: fade-in .22s ease-out; }
 dialog.watch.mini::before { display: none; }   /* el mini, sin fondo */
 @media (hover: none) {   /* en el celular y la tablet, sin desenfoques ni brillos: pesan mucho y casi no se ven */
   .ch::after { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(11, 11, 10, .96); }
-  dialog.dlg::before { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  dialog.dlg::before, .sh-bd { -webkit-backdrop-filter: none; backdrop-filter: none; }
   .yt-av::after, .w-av::after, .sh-av::after, .ch-av::after { display: none; }
   dialog.watch[open]:not(.mini) > .panel { will-change: transform, opacity; }   /* la ventana, ya en su capa: arrastrarla no la vuelve a dibujar */
   .sh-v { transition: none; }
@@ -342,13 +346,28 @@ dialog.watch.mini .w-tip { display: none; }
 .d-txt a { color: var(--acc); }
 /* minimizada: los renglones que entran (dos como mínimo), el texto corrido y “…más” al final, como en YouTube */
 .w-desc:not(.open):not(.fits) .d-txt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--lines, 2); overflow: hidden; white-space: normal; }
-.d-more { font: 500 14px/20px var(--sans); color: var(--text); }
+.d-more { font: 700 14px/20px var(--sans); color: var(--text); }
 .d-more[hidden] { display: none; }
 .w-desc .d-more { margin-left: 8px; }
 .w-desc.cut:not(.open) .d-more { position: absolute; right: 0; bottom: 0; margin: 0; padding-left: 44px; background: linear-gradient(90deg, rgba(29, 29, 27, 0), var(--bg3) 40px); }
 .w-side { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .w-side .chips { flex: none; max-width: none; min-height: 36px; margin: 0 44px 8px 0; }   /* los temas, arriba de la lista, como los de la página (a la izquierda del cerrar) */
 @media (min-width: 1001px) { .w-side > .chips[hidden] + .w-list { margin-top: 36px; } }   /* sin temas, la lista empieza debajo del cerrar */
+.w-scroll { display: contents; }   /* en la compu, la ventana grande: lo que se desliza, con una sola barra (abajo) */
+.w-scroll::-webkit-scrollbar { display: none; }
+@media (min-width: 1001px) {
+  /* una sola barra: la columna del video se desliza con la lista hasta que se ve su final y ahí queda quieta (app.js
+     le pone el tope) mientras la lista sigue; los temas, siempre a la vista, y la lista pasa por debajo */
+  dialog.watch:not(.mini) > .panel { display: block; padding: 0; }
+  dialog.watch:not(.mini) .w-scroll { display: grid; grid-template-columns: var(--stage) minmax(0, 1fr); align-items: start; gap: 0 var(--gut); height: 100%; padding: 0 var(--gut); scroll-padding-top: calc(36px + var(--gut) + 8px); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }   /* sin margen arriba ni abajo: lo ponen las columnas (así la columna del video queda quieta igual en todos los navegadores) */
+  dialog.watch:not(.mini) .w-main { position: sticky; top: 0; overflow: visible; padding-top: var(--gut); padding-bottom: var(--gut); min-height: calc(100dvh - 2 * var(--frame) - 2px); }   /* tan alta como la ventana: la descripción cerrada ocupa lo que queda */
+  dialog.watch:not(.mini) .w-side { padding-bottom: var(--gut); }
+  dialog.watch:not(.mini) .w-side .chips { position: sticky; top: 0; z-index: 2; min-height: calc(36px + var(--gut) + 8px); margin: 0 calc(-1 * var(--gut)) 0 0; padding: var(--gut) calc(44px + var(--gut)) 8px 0; background: var(--bg2); }
+  dialog.watch:not(.mini) .w-side > .chips[hidden] { display: block; min-height: calc(36px + var(--gut)); padding-bottom: 0; }   /* sin temas: el lugar arriba de la lista igual, debajo del cerrar */
+  dialog.watch:not(.mini) .w-side > .chips[hidden] > * { display: none; }
+  dialog.watch:not(.mini) .w-side > .chips[hidden] + .w-list { margin-top: 0; }
+  dialog.watch:not(.mini) .w-list { overflow: visible; }
+}
 .w-side .chip-r { margin: -4px; padding: 4px; scroll-padding-inline: 0; scroll-behavior: auto; touch-action: pan-y; cursor: grab; }   /* alineados con el título de la lista, también en el celular */
 .chip-r { scroll-behavior: auto; touch-action: pan-y; cursor: grab; will-change: transform; }
 .chip-r.dragging { cursor: grabbing; user-select: none; }
@@ -359,7 +378,8 @@ dialog.watch.mini .w-tip { display: none; }
 .w-list::-webkit-scrollbar, .w-body::-webkit-scrollbar, .sh-pan .d-txt::-webkit-scrollbar { display: none; }
 .sbar.in { right: auto; bottom: auto; }   /* sobre el borde derecho de lo que se desliza: la ubica app.js */
 .w-list.dragging { cursor: grabbing; }
-html.grabbing, html.grabbing * { cursor: grabbing !important; -webkit-user-select: none !important; user-select: none !important; }   /* arrastrando con el mouse, como con el dedo */
+.grab-veil { position: fixed; inset: 0; z-index: 2147483647; display: none; cursor: grabbing; -webkit-user-select: none; user-select: none; }   /* arrastrando con el mouse: la manito en toda la pantalla y nada se ilumina ni se marca (app.js) */
+.grab-veil.on { display: block; }
 .w-it { position: relative; display: grid; grid-template-columns: max(140px, 42%) minmax(0, 1fr); gap: 8px; align-items: start; width: 100%; }
 .w-it { transition: background-color .2s, box-shadow .2s; }
 .w-it:focus-visible { background: var(--hl); box-shadow: 0 0 0 var(--gut) var(--hl); }
@@ -429,7 +449,8 @@ dialog.watch.mini.c-tl { inset: calc(var(--barH) + 16px) auto auto 16px; }
    título, las views y los likes, y el canal. Se pasan con la rueda, el dedo, arrastrando o con las flechas */
 dialog.shorts { --shGap: 12px; --peek: calc(var(--frame) - var(--shGap)); --shV: min(100dvh - 2 * var(--peek) - 2 * var(--shGap), (100vw - 436px) * 16 / 9, (100vw - 76px) / 2 * 16 / 9); --shW: calc(var(--shV) * 9 / 16); --shP: max(360px, var(--shW)); }   /* --shP: la descripción, tan ancha como el reel y nunca menos de 360 px */   /* --shGap: el margen chico entre un reel y el siguiente */
 dialog.shorts[open] { display: block; }
-dialog.shorts.sh-drag::before { transition: none; }   /* el fondo sigue al dedo */
+dialog.shorts.sh-drag > .sh-bd { transition: none; }   /* el fondo sigue al dedo */
+dialog.shorts.sh-drag > .sbar { opacity: 0; }   /* la barrita de la descripción se va con el vertical */
 .sh-feed { position: absolute; inset: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scroll-snap-type: y mandatory; scrollbar-width: none; padding: calc(var(--peek) + var(--shGap)) 0 calc(100dvh - var(--shV) - 2 * var(--shGap) - var(--peek)); }   /* de costado no se corre: deslizando el vertical para cerrarlo, se mueve solo ese */
 .sh-feed::-webkit-scrollbar { display: none; }
 .sh-feed.drag { scroll-snap-type: none; cursor: grabbing; user-select: none; }   /* arrastrando con el mouse, como un dedo */
@@ -480,6 +501,7 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
 .sh-dx { margin-top: 6px; max-height: 32dvh; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; font: 400 13px/18px var(--sans); color: var(--on-img); white-space: pre-line; overflow-wrap: anywhere; pointer-events: auto; }   /* siempre abierta; si es muy larga, se desliza adentro */
 .sh-dx::-webkit-scrollbar { display: none; }
 .sh-dx a { color: var(--acc); }
+.sh-info.open .sh-dx { padding-right: 10px; }   /* el lugar de la barrita, si no entra entera (app.js) */
 .sh-x { position: fixed; z-index: 6; top: var(--gut); right: var(--gut); display: none; background: var(--bg2); }   /* en la compu, cerrar va en la descripción */
 .sh-nav { position: fixed; z-index: 6; right: var(--gut); top: 50%; translate: 0 -50%; display: flex; flex-direction: column; gap: 12px; }
 .sh-nav button { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .1); font: 400 20px/1 var(--sans); transition: background .2s, opacity .2s; }
@@ -664,7 +686,7 @@ dialog.watch.mini .w-handle, .stage:fullscreen .w-handle { display: none; }
 button.sh-i { padding: 0; border: 0; color: var(--text); cursor: pointer; }
 button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: lleno y violeta */
 .sh-info:not(.open) .sh-dx { display: none; }
-.sh-more { display: block; margin: 4px 0 0; padding: 0; border: 0; background: none; color: var(--text); font: 500 13px/18px var(--sans); pointer-events: auto; cursor: pointer; }
+.sh-more { display: block; margin: 4px 0 0; padding: 0; border: 0; background: none; color: var(--text); font: 700 13px/18px var(--sans); pointer-events: auto; cursor: pointer; }
 .sh-info.open { background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .88) 22%); }
 .sh-it.on .sh-info, .sh-it.on .sh-act { z-index: 6; }   /* el título, el canal y los números, siempre a la vista encima del video */
 /* tablet o celular acostado: el video no pasa de un poco más de la mitad de la pantalla */
@@ -712,7 +734,7 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
   .work, .yt-av, .w-av, .sh-av, .ch-av, .w-it, .sh-v, .sh-act, .sh-pan, .sh-info, .chip, .feed.swap { transition: none; animation: none; }
   .thumb img, .w-th img, .stage img, .sh-v img, .yt-av img, .w-av img, .sh-av img, .ch-av img, #canal.in, #trabajos.in, .w-t::after { transition: none; animation: none; }
   .chip-r { scroll-behavior: auto; }
-  dialog.dlg[open]::before, dialog.watch[open] > .panel, dialog.shorts[open] > .sh-feed { animation: none; }
+  dialog.dlg[open]::before, dialog.shorts[open] > .sh-bd, dialog.watch[open] > .panel, dialog.shorts[open] > .sh-feed { animation: none; }
   .carga-sk, .carga.out .carga-bar { transition: none; }
   .carga-bar { animation: none; transform: scaleX(.6); }
 }
@@ -754,6 +776,7 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
 <!-- V1 · Reproductor de horizontales: como la página de un video en YouTube -->
 <dialog class="dlg watch" id="dlgWatch" aria-labelledby="w-t">
   <div class="panel" tabindex="-1" autofocus>
+    <div class="w-scroll" id="w-scroll">
     <div class="w-main" id="w-main">
       <div class="stage h" id="w-stage"><img id="w-img" alt=""><span class="dur" id="w-dur"></span><button class="play" id="w-play" type="button" aria-label="Reproducir"><span>▶</span></button><div class="mi-over" data-mini="video" aria-hidden="true"></div><i class="w-handle" aria-hidden="true"></i></div>
       <div class="w-body" id="w-body">
@@ -762,24 +785,26 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
         <div class="w-desc" id="w-desc"></div>
       </div>
     </div>
-    <div class="mini-ui" id="w-mini">
-      <div class="mi-info" data-mini="open"><b class="mi-t" id="mi-t"></b><span class="mi-c" id="mi-c"></span></div>
-      <button class="mi-b mi-play" id="mi-play" type="button" data-mini="play" aria-label="Pausar" hidden></button>
-      <button class="mi-b mi-x" type="button" data-mini="close" aria-label="Cerrar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg></button>
-      <i class="mi-bar" id="mi-bar" hidden><i id="mi-fill"></i></i>
-    </div>
     <aside class="w-side" aria-label="Más trabajos">
       <div class="chips" id="w-chips" hidden>
         <div class="chip-r" id="w-chip-r" role="group" aria-label="Temas"></div>
       </div>
       <div class="w-list" id="w-list"></div>
     </aside>
+    </div>
+    <div class="mini-ui" id="w-mini">
+      <div class="mi-info" data-mini="open"><b class="mi-t" id="mi-t"></b><span class="mi-c" id="mi-c"></span></div>
+      <button class="mi-b mi-play" id="mi-play" type="button" data-mini="play" aria-label="Pausar" hidden></button>
+      <button class="mi-b mi-x" type="button" data-mini="close" aria-label="Cerrar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg></button>
+      <i class="mi-bar" id="mi-bar" hidden><i id="mi-fill"></i></i>
+    </div>
     <button class="x w-x" type="button" data-close aria-label="Cerrar">✕</button>
   </div>
 </dialog>
 
 <!-- V2 · Verticales: como Shorts y TikTok -->
 <dialog class="dlg shorts" id="dlgShorts" aria-label="Shorts, TikToks y reels">
+  <i class="sh-bd" aria-hidden="true"></i>
   <div class="sh-feed" id="sh-feed" tabindex="-1" autofocus></div>
   <div class="sh-nav"><button type="button" data-sh="-1" aria-label="Anterior"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z" fill="currentColor"/></svg></button><button type="button" data-sh="1" aria-label="Siguiente"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z" fill="currentColor"/></svg></button></div>
   <button class="x sh-x" type="button" data-close aria-label="Cerrar">✕</button>
@@ -791,6 +816,6 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
 <script src="js/mock-data.js?v=4c72eb1b"></script>
 <script src="js/config.js"></script>
 <script src="js/data.js?v=a2e5fc36"></script>
-<script src="js/app.js?v=29628eb6"></script>
+<script src="js/app.js?v=646e3c0a"></script>
 </body>
 </html>
