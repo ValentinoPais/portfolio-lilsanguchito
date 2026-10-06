@@ -685,6 +685,20 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
 .vp.r > .vp-big { padding: 18px; }
 .vp.r > .vp-big { display: none; }   /* en los verticales, ningún botón nuestro: solo los de YouTube */
 .vp > .vp-big { display: none; }   /* en ningún reproductor va un botón nuestro en el medio: ahí está el de YouTube */
+/* los verticales, como Shorts: arriba a la izquierda, el play o la pausa y el sonido (los mismos botones del horizontal).
+   En el celular, siempre a la vista; en la compu, con el mouse encima del video o en pausa */
+.vp.r > .vp-row { position: absolute; z-index: 7; top: 8px; left: 8px; height: 40px; padding: 0; opacity: 1; pointer-events: auto; }
+.vp.r .vp-vol { display: flex; align-items: center; }   /* en los verticales, también en el celular: silenciar o no */
+.vp.r .vp-vs { display: none; }
+.vp.r > .vp-dim { background: linear-gradient(rgba(0, 0, 0, .45), rgba(0, 0, 0, 0) 96px); }   /* arriba, para que se lean los botones */
+.vp.r.v-paused > .vp-dim { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .vp.r > .vp-row { opacity: 0; pointer-events: none; }
+  .sh-it.on .sh-v:hover .vp.r > .vp-row, .sh-it.on .sh-v:hover .vp.r > .vp-dim, .vp.r.v-paused > .vp-row, .vp.r > .vp-row:focus-within, .vp.r > .vp-row:has(.vp-vol.on) { opacity: 1; }
+  .sh-it.on .sh-v:hover .vp.r > .vp-row, .vp.r.v-paused > .vp-row, .vp.r > .vp-row:focus-within, .vp.r > .vp-row:has(.vp-vol.on) { pointer-events: auto; }
+  .vp.r .vp-vs { display: block; }   /* el volumen, como en YouTube: con el mouse encima del botón se despliega */
+}
+.sh-v.tt .vp-vs { display: none !important; }   /* TikTok no deja elegir el volumen: solo silenciar */
 /* en la compu, como en YouTube */
 @media (hover: hover) and (pointer: fine) {
   .vp-dim { background: linear-gradient(to top, rgba(0, 0, 0, .62), rgba(0, 0, 0, .28) 52px, rgba(0, 0, 0, 0) 124px); }
@@ -870,6 +884,6 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
 <script src="js/mock-data.js?v=4c72eb1b"></script>
 <script src="js/config.js"></script>
 <script src="js/data.js?v=a2e5fc36"></script>
-<script src="js/app.js?v=cfe9d6ab"></script>
+<script src="js/app.js?v=341f1dbe"></script>
 </body>
 </html>

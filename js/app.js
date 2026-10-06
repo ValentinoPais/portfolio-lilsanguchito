@@ -916,10 +916,11 @@
       '<div class="vp-vs" role="slider" aria-label="Volumen" aria-valuemin="0" aria-valuemax="100"><i></i></div></div>';
     var sk = function (s) { return '<span class="vp-sk ' + s + '" aria-hidden="true"><span><i></i><i></i><i></i></span><b></b></span>'; };
     return '<div class="vp' + (r ? ' r' : '') + '">' +
-      '<div class="vp-tap" aria-hidden="true"></div>' + (r ? '' : '<i class="vp-dim" aria-hidden="true"></i>' + sk('l') + sk('r')) +
+      '<div class="vp-tap" aria-hidden="true"></div><i class="vp-dim" aria-hidden="true"></i>' + (r ? '' : sk('l') + sk('r')) +
       '<i class="vp-spin" aria-hidden="true"></i>' +
       '<button class="vp-big" type="button" aria-label="' + LBL.play + '">' + ICO.play + '</button>' +
-      (r ? '' : '<div class="vp-bot">' +             // los verticales, sin barrita: la que se ve es la del video
+      (r ? '<div class="vp-row"><button class="vp-b vp-pp" type="button" aria-label="' + LBL.play + '">' + ICO.play + '</button>' + vol + '</div>'   // los verticales, como Shorts: arriba a la izquierda, el play y el sonido (sin barrita)
+         : '<div class="vp-bot">' +
         '<div class="vp-row"><button class="vp-b vp-pp" type="button" aria-label="' + LBL.play + '">' + ICO.play + '</button>' +
           '<button class="vp-b vp-next" type="button" aria-label="Siguiente">' + ICO.next + '</button>' + vol +
           '<span class="vp-time"><span class="vp-cur">0:00</span> / <span class="vp-len">0:00</span></span><span class="vp-gap"></span>' +
@@ -1120,6 +1121,7 @@
     if (!v) return;
     var lv = RP.on || (RP.kind === 'tt' && !!RP.f);
     v.classList.toggle('live', lv); v.classList.toggle('seen', RP.seen || (RP.kind === 'tt' && !!RP.f)); if (lv) v.classList.remove('yield');
+    v.classList.toggle('tt', RP.kind === 'tt');       // TikTok: silenciar sí, el volumen no
   }
   // los controles del horizontal, a la vista o no. Sonando, se van solos (con el mouse, si no está sobre la barra de abajo)
   var UIT = 0;
@@ -2038,6 +2040,9 @@
       SB();                                                                          // la barrita, si no entra entera
       return;
     }
+    if (t.closest('.sh-it.on .vp-pp')) return reelToggle();                               // arriba a la izquierda: el play o la pausa
+    if (t.closest('.sh-it.on .vp-mute')) return vMute(RP);                                // y el sonido
+    if (t.closest('.sh-it.on .vp-vol')) return;                                           // la barrita del volumen (se arrastra)
     if ((el = t.closest('.sh-it.on .vp-tap'))) return reelTap(el.closest('.sh-it'), e);   // un toque en el video
     if (t.closest('.sh-it.on .vp-big')) return reelToggle();                               // el play del medio
     if ((el = t.closest('.sh-v .play'))) return reelGo(el.closest('.sh-it'));
