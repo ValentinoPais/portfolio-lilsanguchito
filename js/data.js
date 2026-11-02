@@ -1,4 +1,4 @@
-/* Los datos de la web: la planilla de Google (pestañas Trabajos, Tags y Config), YouTube, Drive y TikTok.
+/* Los datos de la web: la planilla de Google (pestañas Trabajos, Tags, Config y Redes), YouTube, Drive, TikTok e Instagram.
    Con la API key y el ID de la planilla en SITE_CONFIG.google (js/config.js), la web lee todo de ahí; sin
    eso, usa los datos de ejemplo (js/mock-data.js). Devuelve lo mismo que el mock, que tiene la forma de las
    respuestas de las APIs, así el resto de la web no cambia.
@@ -43,6 +43,7 @@ window.loadSiteData = (function () {
   function unique(a) { return a.filter(function (x, i) { return x && a.indexOf(x) === i; }); }
   var str = function (v) { return String(v == null ? '' : v).trim(); };
   var hidden = function (v) { return v === false || /^(false|falso|no)$/i.test(str(v)); };   // una casilla destildada (Mostrar, Activo)
+  var num = function (v) { if (v === '' || v == null) return null; var n = +v; return isFinite(n) ? n : null; };
   var ticked = function (v) { return v === true || /^(true|verdadero|sí|si|x)$/i.test(str(v)); };   // una casilla tildada (Pinneado)
 
   function parseLink(url) {                          // el mismo que usa la web (app.js)
@@ -50,6 +51,7 @@ window.loadSiteData = (function () {
     if ((m = url.match(/youtube\.com\/shorts\/([\w-]{6,})/))) return { kind: 'yt', id: m[1] };
     if ((m = url.match(/(?:youtu\.be\/|[?&]v=|\/live\/|\/embed\/)([\w-]{6,})/))) return { kind: 'yt', id: m[1] };
     if (/tiktok\.com\//.test(url)) return { kind: 'tiktok', id: url };
+    if ((m = url.match(/instagram\.com\/(?:[\w.]+\/)?(?:reels?|p|tv)\/([\w-]+)/) || url.match(/instagr\.am\/(?:reels?|p)\/([\w-]+)/))) return { kind: 'ig', id: m[1] };
     if ((m = url.match(/drive\.google\.com\/file\/d\/([\w-]+)/) || url.match(/drive\.google\.com\/open\?id=([\w-]+)/))) return { kind: 'drive', id: m[1] };
     return { kind: 'otro', id: url };
   }
@@ -62,8 +64,9 @@ window.loadSiteData = (function () {
   function readSheet() {
     var c = load('sheet');                           // lo último que se leyó: solo si Google no responde
     return Promise.all([range('Trabajos!A2:F'), range('Config!A2:C').catch(function () { return null; }),   // sin pestaña Config: la de ejemplo
-      range('Tags!A2:B').catch(function () { return null; })])                                                   // sin pestaña Tags: los tags quedan en el orden de los videos
-      .then(function (r) { var v = { trabajos: r[0], config: r[1], tags: r[2] }; save('sheet', { t: Date.now(), v: v }); return v; })
+      range('Tags!A2:B').catch(function () { return null; }),                                                    // sin pestaña Tags: los tags quedan en el orden de los videos
+      range('Redes!A2:G').catch(function () { return null; })])                                                  // sin pestaña Redes: TikTok e Instagram, sin miniatura
+      .then(function (r) { var v = { trabajos: r[0], config: r[1], tags: r[2], redes: r[3] }; save('sheet', { t: Date.now(), v: v }); return v; })
       .catch(function (e) { if (c) return c.v; throw e; });
   }
   // Config, como tabla de tres columnas: Campo, Texto y Link. Los campos: Título, Barra (un link de la barra
@@ -170,6 +173,17 @@ window.loadSiteData = (function () {
       var shown = rows.filter(function (r) { return r[0] && r[3] !== 'FALSE'; }).map(function (r) { return parseLink(r[0]); });
       var ids = function (k) { return unique(shown.filter(function (L) { return L.kind === k; }).map(function (L) { return L.id; })); };
       var vIds = ids('yt'), dIds = ids('drive'), tUrls = ids('tiktok');
+      // La pestaña Redes, que completa solo el script de la planilla: de cada TikTok y reel de Instagram, el título, el
+      // autor, la miniatura (guardada en el Drive), las views y los likes, que esas redes ya no le pasan a otras páginas
+      var red = {};
+      (S.redes || []).forEach(function (r) {
+        var u = str(r[0]); if (!u) return;
+        red[u] = { title: str(r[1]), author_name: str(r[2]), thumbnail_url: str(r[3]) ? 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(str(r[3])) + '&sz=w720' : '',
+          views: num(r[4]), likes: num(r[5]), id: str(r[6]) };
+      });
+      var mix = function (a, b) { var o = {}, k; a = a || {}; b = b || {}; for (k in a) o[k] = a[k]; for (k in b) if (b[k] !== '' && b[k] != null) o[k] = b[k]; return o; };
+      var ig = {};
+      rows.forEach(function (r) { if (r[0] && r[3] !== 'FALSE' && parseLink(r[0]).kind === 'ig') ig[r[0]] = red[r[0]] || {}; });
       var cfg = readConfig(S.config) || (C.mock || null), warn = [];
       if (S.config === null) warn.push('No está la pestaña Config: va la config de ejemplo');
       return Promise.all([
@@ -186,10 +200,10 @@ window.loadSiteData = (function () {
           if (self && !chs.some(function (c) { return c.id === self.id; })) chs.push(self);
           var files = {}, tk = {};
           dIds.forEach(function (id, i) { files[id] = r[2][i]; });
-          tUrls.forEach(function (u, i) { tk[u] = r[3][i]; });
+          tUrls.forEach(function (u, i) { tk[u] = mix(r[3][i], red[u]); });   // lo de la pestaña Redes manda
           if (dIds.some(function (id) { return files[id].error; })) warn.push('Hay archivos del Drive sin compartir');
           return { live: true, warn: warn.join(' · '), sheet: { trabajos: rows, tags: tags, off: off }, config: cfg,
-            youtube: { videos: { items: videos }, channels: { items: chs }, self: self ? self.id : '' }, drive: { files: files }, tiktok: tk };
+            youtube: { videos: { items: videos }, channels: { items: chs }, self: self ? self.id : '' }, drive: { files: files }, tiktok: tk, instagram: ig };
         });
       });
     });

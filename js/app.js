@@ -59,6 +59,7 @@
     if ((m = url.match(/youtube\.com\/shorts\/([\w-]{6,})/))) return { kind: 'yt', id: m[1], short: true };
     if ((m = url.match(/(?:youtu\.be\/|[?&]v=|\/live\/|\/embed\/)([\w-]{6,})/))) return { kind: 'yt', id: m[1] };
     if (/tiktok\.com\//.test(url)) return { kind: 'tiktok', id: url };
+    if ((m = url.match(/instagram\.com\/(?:[\w.]+\/)?(?:reels?|p|tv)\/([\w-]+)/) || url.match(/instagr\.am\/(?:reels?|p)\/([\w-]+)/))) return { kind: 'ig', id: m[1] };
     if ((m = url.match(/drive\.google\.com\/file\/d\/([\w-]+)/) || url.match(/drive\.google\.com\/open\?id=([\w-]+)/))) return { kind: 'drive', id: m[1] };
     return { kind: 'otro', id: url };
   }
@@ -111,9 +112,17 @@
       w.out = LIVE ? 'https://www.youtube.com/' + (L.short ? 'shorts/' : 'watch?v=') + L.id : ch ? chUrl(ch) : 'https://www.youtube.com/'; w.outLabel = 'Ver en YouTube ↗';
     } else if (L.kind === 'tiktok') {
       var t = M.tiktok[link] || {};
-      w.title = r[1] || t.title || 'TikTok'; w.who = r[2] || t.author_name || ''; w.views = null; w.thumb = t.thumbnail_url; w.vertical = true;
-      w.tt = (link.match(/\/video\/(\d+)/) || [])[1];
+      // el título, el autor, la miniatura, las views y los likes: los trae el script de la planilla (pestaña Redes)
+      w.title = r[1] || t.title || 'TikTok'; w.who = r[2] || t.author_name || ''; w.thumb = t.thumbnail_url; w.vertical = true;
+      w.views = t.views != null ? t.views : null; w.likes = t.likes != null ? t.likes : null;
+      w.tt = (link.match(/\/video\/(\d+)/) || [])[1] || t.id;   // un link corto (vm.tiktok.com): el número lo encuentra el script
       w.out = LIVE ? link : 'https://www.tiktok.com/'; w.outLabel = 'Ver en TikTok ↗';
+    } else if (L.kind === 'ig') {                      // un reel de Instagram: lo mismo, de la pestaña Redes
+      var g = (M.instagram || {})[link] || {};
+      w.title = r[1] || g.title || 'Instagram'; w.who = r[2] || g.author_name || ''; w.thumb = g.thumbnail_url; w.vertical = true;
+      w.views = g.views != null ? g.views : null; w.likes = g.likes != null ? g.likes : null;
+      w.ig = L.id;
+      w.out = LIVE ? link : 'https://www.instagram.com/'; w.outLabel = 'Ver en Instagram ↗';
     } else if (L.kind === 'drive') {
       var f = M.drive.files[L.id] || {};
       w.title = r[1] || String(f.name || '').replace(/\.[^.]+$/, ''); w.who = r[2] || ''; w.views = null; w.thumb = f.thumbnailUrl;
@@ -626,26 +635,27 @@
   // El play es a mano: recién ahí se carga el reproductor de YouTube, Drive o TikTok, en el lugar de la
   // miniatura (al abrir un video se aprieta solo). Un video que su canal no deja insertar se abre en YouTube.
   // Con los datos de ejemplo, un aviso.
-  function embedOf(w, pre, reel) {                   // pre: se carga sin arrancar; reel: un vertical (con los controles de YouTube, que casi no se ven)
+  function embedOf(w, pre) {                         // pre: se carga sin arrancar (el vertical de abajo o de arriba)
     // YouTube, siempre sin sus controles: encima van los nuestros, como los de YouTube (enablejsapi: así los manejan)
-    if (w.yt) return w.embed ? 'https://www.youtube-nocookie.com/embed/' + w.yt + '?autoplay=' + (pre ? 0 : 1) + '&playsinline=1&rel=0&enablejsapi=1&controls=' + (reel ? 1 : 0) + '&fs=0&disablekb=1&iv_load_policy=3' +
+    if (w.yt) return w.embed ? 'https://www.youtube-nocookie.com/embed/' + w.yt + '?autoplay=' + (pre ? 0 : 1) + '&playsinline=1&rel=0&enablejsapi=1&controls=0&fs=0&disablekb=1&iv_load_policy=3' +
       (location.origin && location.origin !== 'null' ? '&origin=' + encodeURIComponent(location.origin) : '') : '';
     if (w.drive) return 'https://drive.google.com/file/d/' + w.drive + '/preview';
+    if (w.ig) return 'https://www.instagram.com/p/' + w.ig + '/embed/';   // Instagram: su reproductor, con su play (no deja manejarlo desde afuera)
     if (w.tt) return 'https://www.tiktok.com/player/v1/' + w.tt + '?autoplay=' + (pre ? 0 : 1) + '&rel=0&loop=1&controls=0&progress_bar=0&play_button=0&volume_control=0&fullscreen_button=0&timestamp=0&music_info=0&description=0&native_context_menu=0&closed_caption=0';
     return '';
   }
   function playHere(btn, stage, w, pre) {
-    var src = LIVE && w ? embedOf(w, pre, stage && stage.classList.contains('sh-v')) : '';
+    var src = LIVE && w ? embedOf(w, pre) : '';
     if (LIVE && w && !src) { if (!pre) outOpen(w.out); return; }   // no se puede ver acá: primero, a dónde lleva
     if (!pre && btn) btn.hidden = true;
     if (src) {
       var f = document.createElement('iframe');
       f.src = src; f.setAttribute('aria-label', w.title);   // sin title: nada de cartelitos del navegador
       f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.allowFullscreen = true;
-      f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin'); f.className = (w.yt ? 'yt' : w.tt ? 'tt' : 'dr') + (pre ? ' pre' : '');
+      f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin'); f.className = (w.yt ? 'yt' : w.tt ? 'tt' : w.ig ? 'ig' : 'dr') + (pre ? ' pre' : '');
       f.addEventListener('load', function () { f.dataset.ok = '1'; });
       stage.insertBefore(f, stage.querySelector('.vp'));   // debajo de los controles
-      if (!pre) stage.classList.add('playing'); stage.classList.toggle('dr', !!w.drive);
+      if (!pre) stage.classList.add('playing'); stage.classList.toggle('dr', !!(w.drive || w.ig));   // Drive e Instagram: su reproductor, a la vista y sin los nuestros encima
       return;
     }
     if (pre) return;
@@ -1007,6 +1017,7 @@
       if (S.kind === 'yt') post(S.f, 'yt', 'cc');
       if (PREF.vol !== 100) { post(S.f, S.kind, 'vol', PREF.vol); S.vol = PREF.vol; }
       if (PREF.muted) { post(S.f, S.kind, 'mute'); S.muted = true; }
+      else if (S.kind === 'tt') { post(S.f, 'tt', 'unmute'); S.muted = false; }   // TikTok arranca mudo: con sonido, como los demás
     }
     if (st !== S.st) {
       if (st === 1) { S.since = now; if (S.nb !== 1) S.fr = now; if (!S.on && S.kind === 'yt') post(S.f, 'yt', 'cc'); }
@@ -1739,7 +1750,7 @@
       '<button class="play' + (LIVE && embedOf(w) ? ' auto' : '') + '" type="button" aria-label="' + esc('Reproducir “' + w.title + '”') + '"><span>▶</span></button>' +
       '<div class="sh-info">' + who + '<p class="sh-ttl">' + esc(w.title) + '</p>' +
       (text ? '<button class="sh-more" type="button" aria-expanded="false">…más</button><div class="sh-dx">' + text + '</div>' : '') + '</div>' +
-      (w.drive ? '' : vpHTML(true)) + '</div>' +
+      (w.drive || w.ig ? '' : vpHTML(true)) + '</div>' +
       '<div class="sh-act">' + acts + '</div>' +
       '<aside class="sh-pan" aria-label="Descripción"><h3 class="sd-t">' + esc(w.title) + '</h3><button class="x sd-x" type="button" data-close aria-label="Cerrar">✕</button>' +
       (text ? '<div class="d-txt">' + text + '</div>' : '<div class="nod">Sin descripción.</div>') + (foot ? '<div class="sd-foot">' + foot + '</div>' : '') + '</aside></article>';
@@ -2066,9 +2077,13 @@
     var L = document.createElement('a'); L.href = u;
     var host = L.hostname.replace(/^(www|m)\./, ''), seg = L.pathname.split('/').filter(Boolean).map(function (s) { try { return decodeURIComponent(s); } catch (e) { return s; } });
     var at = function (s) { return s ? '@' + s.replace(/^@/, '') : ''; };
-    var work = function (id) { var r = null; if (id) works.forEach(function (x) { if (!r && (x.yt === id || x.drive === id || x.tt === id)) r = x; }); return r; };
+    var work = function (id) { var r = null; if (id) works.forEach(function (x) { if (!r && (x.yt === id || x.drive === id || x.tt === id || x.ig === id)) r = x; }); return r; };
     if (/^mailto:/i.test(u)) { var m = u.slice(7).split('?')[0]; try { m = decodeURIComponent(m); } catch (e) {} return { k: 'mail', to: 'Para escribirle un mail', who: m, go: 'Abrir en tu mail' }; }
-    if (/(^|\.)instagram\.com$/.test(host)) return { k: 'instagram', to: 'Te lleva a Instagram', who: /^(p|reels?|tv)$/.test(seg[0] || '') ? 'Una publicación' : at(seg[0] === 'stories' ? seg[1] : seg[0]) || 'Instagram', go: 'Abrir en Instagram' };
+    if (/(^|\.)instagram\.com$/.test(host)) {
+      var gk = -1; seg.forEach(function (s, n) { if (gk < 0 && /^(p|reels?|tv)$/.test(s)) gk = n; });
+      var gw = gk >= 0 ? work(seg[gk + 1]) : null;     // un reel de la página: su título
+      return { k: 'instagram', to: 'Te lleva a Instagram', who: gw ? gw.title : gk === 0 ? 'Una publicación' : at(seg[0] === 'stories' ? seg[1] : seg[0]) || 'Instagram', sub: gw && gw.who ? gw.who : '', go: 'Abrir en Instagram' };
+    }
     if (/(^|\.)tiktok\.com$/.test(host)) {
       var tu = seg.filter(function (s) { return s.charAt(0) === '@'; })[0] || '', tw = seg.indexOf('video') >= 0 ? work(seg[seg.indexOf('video') + 1]) : null;
       return { k: 'tiktok', to: 'Te lleva a TikTok', who: tw ? tw.title : tu || 'TikTok', sub: tw ? tu : '', go: 'Abrir en TikTok' };

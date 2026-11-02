@@ -6,9 +6,9 @@
 <meta name="description" content="Portfolio de Lil Sanguchito, editor de video.">
 <title>Sanguchito Trabajos</title>
 <!-- el ícono: en la pestaña, en los favoritos y en el inicio del celu -->
-<link rel="icon" href="favicon.ico" sizes="32x32">
-<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="icon" href="favicon.ico?v=35a76229" sizes="32x32">
+<link rel="icon" href="assets/favicon.svg?v=7afbd639" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=92a07db4">
 <link rel="manifest" href="site.webmanifest">
 <meta name="theme-color" content="#0b0b0a">
 <!-- la vista previa al compartir el link (WhatsApp y demás): la imagen va con la dirección completa del sitio publicado -->
@@ -621,7 +621,9 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
    que se ve siempre, fina, en el borde de abajo. Los verticales, como Shorts: en pausa, el
    play en el medio, el único */
 .stage iframe.yt, .sh-v iframe.yt { top: -60px; bottom: auto; height: calc(100% + 120px); }
-.sh-v iframe.yt { top: -140px; height: calc(100% + 280px); }   /* los verticales, con los controles de YouTube: su título y su barra, bien afuera */
+.sh-v iframe.yt { top: -140px; height: calc(100% + 280px); }   /* los verticales: lo que YouTube muestre arriba y abajo, bien afuera */
+.sh-v iframe.tt { right: auto; bottom: auto; left: -46px; top: -70px; width: calc(100% + 92px); height: calc(100% + 92px * 16 / 9); }   /* TikTok: su nombre y su foto (arriba) y sus likes (a la derecha), afuera; el video, igual de proporción */
+.sh-v iframe.ig { right: auto; bottom: auto; left: calc(-21.11% - 3.3px); top: -57px; width: calc(142.22% + 22px); height: calc(100% + 420px); }   /* Instagram: muestra el vertical en el medio de un cuadro 4:5, con su nombre arriba y sus likes abajo: el vertical, justo en el recuadro */
 .stage:fullscreen { width: 100%; height: 100%; aspect-ratio: auto; }
 .stage:fullscreen iframe.yt { --fw: min(100vw, 100vh * 16 / 9); left: calc((100vw - var(--fw)) / 2); width: var(--fw); top: calc((100vh - var(--fw) * 9 / 16) / 2 - 60px); height: calc(var(--fw) * 9 / 16 + 120px); }
 .stage iframe, .sh-v iframe { transition: opacity .25s ease; }
@@ -883,7 +885,7 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
 <!-- cada archivo con su versión (?v=): así, después de subir cambios, el navegador no usa uno viejo guardado -->
 <script src="js/mock-data.js?v=4c72eb1b"></script>
 <script src="js/config.js"></script>
-<script src="js/data.js?v=a2e5fc36"></script>
-<script src="js/app.js?v=341f1dbe"></script>
+<script src="js/data.js?v=81f034c0"></script>
+<script src="js/app.js?v=8255a25f"></script>
 </body>
 </html>
