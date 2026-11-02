@@ -174,11 +174,13 @@ window.loadSiteData = (function () {
       var ids = function (k) { return unique(shown.filter(function (L) { return L.kind === k; }).map(function (L) { return L.id; })); };
       var vIds = ids('yt'), dIds = ids('drive'), tUrls = ids('tiktok');
       // La pestaña Redes, que completa solo el script de la planilla: de cada TikTok y reel de Instagram, el título, el
-      // autor, la miniatura (guardada en el Drive), las views y los likes, que esas redes ya no le pasan a otras páginas
+      // autor, la carátula, las views y los likes, que esas redes ya no le pasan a otras páginas
       var red = {};
       (S.redes || []).forEach(function (r) {
-        var u = str(r[0]); if (!u) return;
-        red[u] = { title: str(r[1]), author_name: str(r[2]), thumbnail_url: str(r[3]) ? 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(str(r[3])) + '&sz=w720' : '',
+        var u = str(r[0]), m = str(r[3]); if (!u) return;
+        red[u] = { title: str(r[1]), author_name: str(r[2]),
+          thumbnail_url: /^https?:\/\//i.test(m) ? m :                         // la dirección de la carátula (en GitHub, por jsDelivr)
+            m ? 'https://lh3.googleusercontent.com/d/' + encodeURIComponent(m) + '=w720' : '',   // o, las de antes, el ID del archivo del Drive (adonde lleva drive.google.com/thumbnail, sin ese paso, que a veces falla)
           views: num(r[4]), likes: num(r[5]), id: str(r[6]) };
       });
       var mix = function (a, b) { var o = {}, k; a = a || {}; b = b || {}; for (k in a) o[k] = a[k]; for (k in b) if (b[k] !== '' && b[k] != null) o[k] = b[k]; return o; };

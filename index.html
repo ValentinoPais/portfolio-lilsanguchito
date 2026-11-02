@@ -222,6 +222,7 @@ a.w-chl::before, a.sd-ch::before { content: ""; position: absolute; inset: calc(
 a.w-chl::before, a.sd-ch::before { border-radius: var(--hr); }
 .r169 { aspect-ratio: 16 / 9; } .r916 { aspect-ratio: 9 / 16; }
 .thumb img { width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; user-select: none; }
+.thumb iframe.tt-cap { position: absolute; left: calc(-46px - 6%); top: calc(-18px - 8.61%); width: calc(112% + 92px); height: calc(112% + 163.6px); border: 0; pointer-events: none; }   /* el primer cuadro de un TikTok sin carátula: su nombre, su foto y sus likes, afuera (la tarjeta es 9:16) */
 .dur { position: absolute; right: var(--gut); bottom: var(--gut); font: 500 12px/1 var(--sans); color: var(--text); background: rgba(11, 11, 10, .82); padding: 3px 4px; font-variant-numeric: tabular-nums; }
 .yt-m { position: relative; z-index: 1; display: flex; align-items: flex-start; gap: 12px; margin-top: 12px; }
 .yt-av { flex: none; width: 36px; height: 36px; border-radius: 50%; overflow: hidden; background: var(--bg3); box-shadow: 0 0 0 1px var(--line); }
@@ -319,6 +320,7 @@ dialog.shorts::before { display: none; }   /* los verticales, con su fondo propi
 dialog.shorts[open] > .sh-bd { animation: fade-in .22s ease-out; }
 dialog.watch.mini::before { display: none; }   /* el mini, sin fondo */
 @media (hover: none) {   /* en el celular y la tablet, sin desenfoques ni brillos: pesan mucho y casi no se ven */
+  .track { will-change: auto; }   /* ahí la fila no se corre con transform (solo se scrollea): sin capa de más */
   .ch::after { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(11, 11, 10, .96); }
   dialog.dlg::before, .sh-bd { -webkit-backdrop-filter: none; backdrop-filter: none; }
   .yt-av::after, .w-av::after, .sh-av::after, .ch-av::after { display: none; }
@@ -407,6 +409,7 @@ dialog.watch.mini .w-tip { display: none; }
 }
 .w-side .chip-r { margin: -4px; padding: 4px; scroll-padding-inline: 0; scroll-behavior: auto; touch-action: pan-y; cursor: grab; }   /* alineados con el título de la lista, también en el celular */
 .chip-r { scroll-behavior: auto; touch-action: pan-y; cursor: grab; will-change: transform; }
+@media (hover: none) { .chip-r { will-change: auto; } }   /* en el celular la fila de los temas tampoco se corre con transform: sin capa de más (scrollear la página va más liviano) */
 .chip-r.dragging { cursor: grabbing; user-select: none; }
 .w-x { position: absolute; top: var(--gut); right: var(--gut); z-index: 2; background: var(--bg2); }
 .w-list { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); align-content: start; gap: var(--gut); padding: var(--gut) 14px var(--gut) var(--gut); margin: 0 calc(-1 * var(--gut)) calc(-1 * var(--gut)); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; cursor: grab; user-select: none; }
@@ -612,7 +615,14 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
   .w-it-ttl { flex-basis: 100%; font-size: 16px; line-height: 22px; }
   .w-it-s { font-size: 14px; line-height: 20px; }
   .w-x { top: var(--gut); right: var(--gut); z-index: 5; background: rgba(11, 11, 10, .72); border-color: transparent; }
+  /* crudo: la ventana se desliza (ver app.js): arriba, el espacio vacío para bajarla; lo de siempre, con su fondo, debajo */
+  .crudo dialog.watch:not(.mini) > .panel { --pull: min(280px, 40dvh); position: relative; display: block; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scroll-snap-type: y mandatory; scrollbar-width: none; background: none; border-color: transparent; }
+  .crudo dialog.watch:not(.mini) > .panel::-webkit-scrollbar { display: none; }
+  .crudo dialog.watch:not(.mini) .w-pull { display: block; height: var(--pull); scroll-snap-align: start; }
+  .crudo dialog.watch:not(.mini) .w-scroll { display: flex; flex-direction: column; gap: var(--gut); height: 100%; scroll-snap-align: start; background: var(--bg2); }
+  .crudo dialog.watch:not(.mini) .w-x { position: absolute; top: calc(var(--pull) + var(--gut)); }   /* cerrar, arriba de lo que se ve (y baja con la ventana) */
 }
+.w-pull { display: none; }
 /* ---------- los reproductores, como los de YouTube ----------
    El de YouTube va sin sus controles y más alto que el cuadro: su título de arriba y lo de abajo quedan afuera.
    Hasta que arranca se ve la miniatura, con la ruedita. Encima van los controles nuestros (los maneja app.js):
@@ -620,22 +630,56 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
    el video y aparecen el play o la pausa en el medio y, abajo, el tiempo y pantalla completa, sobre la barrita,
    que se ve siempre, fina, en el borde de abajo. Los verticales, como Shorts: en pausa, el
    play en el medio, el único */
-.stage iframe.yt, .sh-v iframe.yt { top: -60px; bottom: auto; height: calc(100% + 120px); }
-.sh-v iframe.yt { top: -140px; height: calc(100% + 280px); }   /* los verticales: lo que YouTube muestre arriba y abajo, bien afuera */
-.sh-v iframe.tt { right: auto; bottom: auto; left: -46px; top: -70px; width: calc(100% + 92px); height: calc(100% + 92px * 16 / 9); }   /* TikTok: su nombre y su foto (arriba) y sus likes (a la derecha), afuera; el video, igual de proporción */
-.sh-v iframe.ig { right: auto; bottom: auto; left: calc(-21.11% - 3.3px); top: -57px; width: calc(142.22% + 22px); height: calc(100% + 420px); }   /* Instagram: muestra el vertical en el medio de un cuadro 4:5, con su nombre arriba y sus likes abajo: el vertical, justo en el recuadro */
+/* crudo (la clase la pone js/app.js): sin estos recortes, cada reproductor entero */
+:root:not(.crudo) .stage iframe.yt, :root:not(.crudo) .sh-v iframe.yt { top: -60px; bottom: auto; height: calc(100% + 120px); }
+:root:not(.crudo) .sh-v iframe.yt { top: -140px; height: calc(100% + 280px); }   /* los verticales: lo que YouTube muestre arriba y abajo, bien afuera */
+:root:not(.crudo) .sh-v iframe.tt { --tc: calc(46px + var(--shW) * .06); right: auto; bottom: auto; left: calc(-1 * var(--tc)); top: calc(-18px - var(--shW) * .153); width: calc(var(--shW) + 2 * var(--tc)); height: calc((var(--shW) + 2 * var(--tc)) * 16 / 9); }   /* TikTok: su nombre y su foto (arriba) y sus likes (a la derecha), afuera; el video, igual de proporción. TikTok los agranda con el reproductor, así que el recorte crece con el reel (medido en el de verdad, de 300 a 560 px de ancho, con likes de seis cifras como «343.4K») */
+:root:not(.crudo) .sh-v iframe.ig { right: auto; bottom: auto; left: calc(-21.11% - 3.3px); top: -57px; width: calc(142.22% + 22px); height: calc(100% + 420px); }   /* Instagram: muestra el vertical en el medio de un cuadro 4:5, con su nombre arriba y sus likes abajo: el vertical, justo en el recuadro */
 .stage:fullscreen { width: 100%; height: 100%; aspect-ratio: auto; }
-.stage:fullscreen iframe.yt { --fw: min(100vw, 100vh * 16 / 9); left: calc((100vw - var(--fw)) / 2); width: var(--fw); top: calc((100vh - var(--fw) * 9 / 16) / 2 - 60px); height: calc(var(--fw) * 9 / 16 + 120px); }
+:root:not(.crudo) .stage:fullscreen iframe.yt { --fw: min(100vw, 100vh * 16 / 9); left: calc((100vw - var(--fw)) / 2); width: var(--fw); top: calc((100vh - var(--fw) * 9 / 16) / 2 - 60px); height: calc(var(--fw) * 9 / 16 + 120px); }
 .stage iframe, .sh-v iframe { transition: opacity .25s ease; }
 .stage.playing:not(.seen):not(.yield):not(.dr) iframe, .sh-v:not(.seen):not(.yield):not(.dr) iframe { opacity: 0; }   /* hasta que se ve la imagen, la miniatura */
-.stage.fin iframe { visibility: hidden; }   /* si llegó a terminar del todo: la miniatura, no la pantalla final de YouTube */
+:root:not(.crudo) .stage.fin iframe { visibility: hidden; }   /* si llegó a terminar del todo: la miniatura, no la pantalla final de YouTube */
 .stage.playing .dur { display: none; }
 .sh-v iframe.pre { visibility: hidden; }   /* el de abajo y el de arriba, ya cargados y escondidos */
 .vp { position: absolute; inset: 0; color: #fff; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 .stage:not(.playing) > .vp, .stage.dr > .vp, .stage.yield > .vp, .sh-v:not(.playing) > .vp, .sh-v.yield > .vp, dialog.watch.mini .vp { display: none; }
+.crudo .vp, .crudo .sh-v.playing > .sh-info { display: none !important; }   /* crudo: nada nuestro encima del video (ni el título de abajo, en la tablet y el celular) */
 .vp-tap { position: absolute; inset: 0; z-index: 5; touch-action: none; }
-#w-stage, #w-stage * { touch-action: none; }   /* el horizontal se arrastra desde cualquier parte, también desde sus botones, en pausa o antes de arrancar */
+:root:not(.crudo) #w-stage, :root:not(.crudo) #w-stage * { touch-action: none; }   /* el horizontal se arrastra desde cualquier parte, también desde sus botones, en pausa o antes de arrancar */
 .vp.r .vp-tap, .sh-v, .sh-v *:not(iframe) { touch-action: pan-y; }   /* los verticales se pasan deslizando el dedo sobre el video (y de costado, se cierran) */
+/* crudo: deslizar el vertical de costado para cerrarlo (y bajar el horizontal para achicarlo: en lo del celular y la tablet) es el deslizamiento del
+   navegador, que anda también encima de los reproductores. El video, en el medio de una tira con un espacio a cada lado: en el
+   celular y la tablet, la tira va de borde a borde de la pantalla (el video se va por el costado); en la compu, del ancho del video */
+.crudo .sh-v, .crudo .sh-v * { touch-action: pan-x pan-y; }
+.sh-sw { grid-row: 1; grid-column: 1; display: flex; width: var(--shW); height: var(--shV); overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; pointer-events: none; touch-action: pan-x pan-y; }
+.sh-sw::-webkit-scrollbar { display: none; }
+.sh-it:not(.on) .sh-sw { overflow-x: hidden; }   /* solo el de la pantalla */
+.sh-sp { flex: none; width: 100%; }
+.sh-sp:first-child { scroll-snap-align: start; }
+.sh-sp:last-child { scroll-snap-align: end; }
+.sh-sw > .sh-v { flex: none; pointer-events: auto; scroll-snap-align: center; }
+/* crudo: encima de lo que en cada reproductor lleva a su página, links invisibles a lo mismo, con la ventanita que dice a dónde
+   lleva (ver pOut en app.js). Medido en cada reproductor */
+.p-out { display: none; position: absolute; z-index: 5; -webkit-tap-highlight-color: transparent; }
+.crudo .playing > .p-out { display: block; }
+dialog.watch.mini .p-out { display: none !important; }
+.p-out.tt-l { left: 0; top: 0; width: 46%; height: 9%; }   /* TikTok: su nombre y su foto (los agranda con el reproductor) */
+.p-out.tt-r { right: 0; top: 0; width: 16%; height: 9%; }   /* su logo */
+.p-out.tt-s { right: 0; top: 60%; width: calc(34px + 6%); height: 31%; }   /* likes, comentarios y compartir */
+.p-out.yt-t { left: 0; top: 0; width: 62%; height: 56px; }   /* YouTube: el título y el canal (a la derecha, el sonido, los subtítulos y la configuración, libres) */
+.p-out.yt-l { display: none !important; }
+@media (hover: hover) and (pointer: fine) { .crudo .sh-v.playing > .p-out.yt-l, .crudo dialog.watch:not(.mini) .stage.playing > .p-out.yt-l { display: block !important; right: 0; bottom: 0; width: 150px; height: 64px; } }   /* su logo, abajo a la derecha (con el mouse: en el celular ahí va pantalla completa) */
+.p-out.ig-t { left: 0; right: 0; top: 0; height: 54px; }   /* Instagram: la cuenta y Ver perfil */
+.p-out.ig-b { left: 0; right: 0; top: calc(54px + 70.3%); bottom: 0; }   /* lo de abajo del video (cuadro 4:5): Ver más en Instagram, likes, comentarios */
+.p-out.dr-x { right: 0; top: 0; width: 64px; height: 64px; }   /* Drive: abrirlo aparte */
+/* crudo: con el mouse, el video es del reproductor: para achicar el horizontal o pasar o cerrar el vertical, se agarra de la manijita de arriba */
+.crudo .w-handle { opacity: 1; pointer-events: auto; cursor: grab; }
+.crudo .w-handle::before, .crudo .sh-grip::before { content: ""; position: absolute; inset: -14px -32px; }   /* más fácil de agarrar */
+.sh-grip { display: none; }
+@media (hover: hover) and (pointer: fine) {   /* la del vertical no se ve: con el mouse, arriba al medio, se agarra igual (aparece la manito); con el dedo, nada */
+  .crudo .sh-grip { display: block; position: absolute; z-index: 6; top: 8px; left: 50%; width: 36px; height: 4px; margin-left: -18px; cursor: grab; }
+}
 .vp button { position: relative; display: grid; place-items: center; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; }
 .vp button[hidden] { display: none; }
 .vp svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, .45)); }
@@ -741,6 +785,7 @@ a.sh-ch:hover b { text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 1000px) { .w-handle { opacity: 1; } }
 dialog.watch.mini .w-handle, .stage:fullscreen .w-handle { display: none; }
 .w-veil { position: fixed; inset: 0; z-index: 29; background: var(--shade); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); pointer-events: none; }   /* el fondo de la ventana, que se apaga mientras el video vuela al mini */
+@media (hover: none) { .w-veil { -webkit-backdrop-filter: none; backdrop-filter: none; } }   /* en el celular, sin desenfoque, como los otros fondos */
 /* la descripción del vertical, cerrada; con “…más” se abre, como en YouTube */
 button.sh-i { padding: 0; border: 0; color: var(--text); cursor: pointer; }
 button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: lleno y violeta */
@@ -770,6 +815,8 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
   .sh-act { display: flex; }   /* sin panel: los likes y las views vuelven al costado del video */
   .sh-pan, .sh-nav { display: none; }
   .sh-x { display: grid; }   /* sin la descripción al costado, cerrar vuelve arriba a la derecha */
+  .sh-sw { width: 100vw; margin-left: calc(-1 * clamp(var(--gut), 50vw - var(--shW) / 2, 100vw - var(--shW) - 72px)); }   /* crudo: la tira, de borde a borde */
+  .sh-sp { width: 100vw; }
   .sh-info { display: block; }
 }
 /* celular: una ventana, como en la compu, no pantalla completa: el reel centrado con margen a los costados y,
@@ -780,6 +827,8 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
   .sh-it { position: relative; grid-template-columns: var(--shW); width: var(--shW); margin: 0 0 var(--shGap) calc(50vw - var(--shW) / 2); }
   .sh-info { padding: 120px 64px calc(var(--tx) + 8px) var(--tx); }
   .sh-act { position: absolute; right: var(--gut); bottom: calc(var(--tx) + 8px); gap: 14px; }
+  .sh-sw { margin-left: calc(var(--shW) / 2 - 50vw); }
+  .crudo .sh-it:has(.sh-v.playing) > .sh-act { display: none; }   /* crudo: los likes y las views, que acá van encima del video, no */
   .sh-i { background: rgba(11, 11, 10, .46); }
   .sh-a { text-shadow: 0 1px 2px rgba(0, 0, 0, .7); }
   .sh-x { top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; background: rgba(11, 11, 10, .72); border-color: transparent; }
@@ -885,7 +934,7 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
 <!-- cada archivo con su versión (?v=): así, después de subir cambios, el navegador no usa uno viejo guardado -->
 <script src="js/mock-data.js?v=4c72eb1b"></script>
 <script src="js/config.js"></script>
-<script src="js/data.js?v=81f034c0"></script>
-<script src="js/app.js?v=8255a25f"></script>
+<script src="js/data.js?v=9c9d6f2f"></script>
+<script src="js/app.js?v=8d3e8a8e"></script>
 </body>
 </html>

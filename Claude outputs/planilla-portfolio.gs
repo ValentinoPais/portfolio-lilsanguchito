@@ -6,6 +6,16 @@
  *   2. Arriba, elegir «activarRedes», tocar Ejecutar y aceptar los permisos. Google avisa que la app no está
  *      verificada porque es un script propio: Configuración avanzada > Ir a … (no seguro) > Permitir.
  *   3. Volver a cargar la planilla: aparece el menú Portfolio.
+ *   4. Las carátulas de los TikTok y reels, una sola vez. El Drive no se las muestra a quien no tiene una cuenta de
+ *      Google abierta, así que van a un repositorio público de GitHub, aparte del de la web:
+ *        a. En GitHub: New repository. Un nombre (por ejemplo caratulas-portfolio), Public y con README.
+ *        b. Foto de perfil > Settings > Developer settings > Personal access tokens > Fine-grained tokens >
+ *           Generate new token. Expiration: No expiration (o la más larga). Repository access: Only select
+ *           repositories, ese repositorio. Permissions: Contents, Read and write. Generate token y copiarlo.
+ *        c. Acá: Portfolio > Conectar GitHub (carátulas). Pegar el repositorio (usuario/nombre) y el token: pasa
+ *           a GitHub las carátulas que ya estaban y desde ahí las nuevas se suben solas.
+ *      Si algún día GitHub no acepta más el token (venció o se borró), la columna Nota de Redes lo dice: se hace
+ *      otro (b) y se vuelve a conectar (c).
  * Desde ahí, los TikTok y reels de Instagram de Trabajos se completan solos cada hora (o en el momento, con
  * Portfolio > Completar TikTok e Instagram ahora): solo hace falta pegar el link.
  * «prepararPlanilla» ya está hecho; se puede correr de nuevo cuando quieras: no duplica nada ni cambia lo que ya
@@ -176,8 +186,9 @@ function onEdit(e) {
 // ======================= TikTok e Instagram: la pestaña Redes =======================
 // TikTok e Instagram ya no les pasan a otras páginas el título, la miniatura ni las views de sus videos. Este script
 // los busca: de cada link de TikTok o de Instagram de Trabajos completa una fila de la pestaña Redes (oculta), que
-// es lo que lee la web. Las miniaturas quedan guardadas en una carpeta del Drive («Portfolio - miniaturas de TikTok
-// e Instagram»), compartida con cualquiera que tenga el link, así la web las puede mostrar.
+// es lo que lee la web. Las carátulas las sube a GitHub (arriba de todo, paso 4) y la web las muestra desde jsDelivr.
+// Sin GitHub conectado quedan en una carpeta del Drive («Portfolio - miniaturas de TikTok e Instagram»), pero esas
+// solo las ve quien tiene una cuenta de Google abierta.
 // Corre solo cada hora: completa los links nuevos y, cada 12 horas, las views y los likes de los que ya estaban.
 // También desde el menú Portfolio > Completar TikTok e Instagram ahora.
 var REDES = 'Redes';
@@ -188,6 +199,7 @@ var NAVEGADOR = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (K
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('Portfolio')
     .addItem('Completar TikTok e Instagram ahora', 'completarRedes')
+    .addItem('Conectar GitHub (carátulas)', 'conectarGitHub')
     .addToUi();
 }
 
@@ -217,6 +229,7 @@ function completarRedes() {
 
 function resumen(r) {
   return r.links + (r.links === 1 ? ' link' : ' links') + ' de TikTok e Instagram; ' + r.hechos + (r.hechos === 1 ? ' completado' : ' completados') + ' ahora' +
+    (r.pasadas ? ', ' + r.pasadas + (r.pasadas === 1 ? ' carátula pasada' : ' carátulas pasadas') + ' a GitHub' : '') +
     (r.fallas ? ', ' + r.fallas + ' con problemas (la columna Nota de la pestaña Redes dice cuál)' : '') + '.';
 }
 
@@ -224,7 +237,7 @@ function completar() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var tr = ss.getSheetByName('Trabajos');
   if (!tr) throw new Error('No está la pestaña Trabajos');
-  var sh = hojaRedes(ss);
+  var sh = hojaRedes(ss), gh = github();
   // los links de TikTok y de Instagram de Trabajos (cada uno una vez)
   var links = [], visto = {};
   if (tr.getLastRow() > 1) tr.getRange(2, 1, tr.getLastRow() - 1, 1).getValues().forEach(function (r) {
@@ -234,44 +247,57 @@ function completar() {
   // lo que ya está en Redes
   var filas = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, COLUMNAS.length).getValues() : [], fila = {};
   filas.forEach(function (f, i) { var u = String(f[0]).trim(); if (u) fila[u] = i; });
-  var inicio = Date.now(), hechos = 0, fallas = 0;
+  var inicio = Date.now(), hechos = 0, pasadas = 0, fallas = 0, error = '';
+  var falla = function (e) { var m = String(e && e.message || e); fallas++; if (!error) error = m; return m; };
   links.forEach(function (u) {
     if (Date.now() - inicio > 4.5 * 60e3) return;                         // Apps Script corta a los 6 minutos: lo que falte, la próxima vez
     var i = fila[u], f = i == null ? null : filas[i];
     var completa = f && f[3] && f[6], cuando = f && f[7] instanceof Date ? f[7].getTime() : 0;
-    if (completa && Date.now() - cuando < CADA) return;
+    if (completa && Date.now() - cuando < CADA) {
+      var nom = tapa(u, f[6]), url = /^https?:/i.test(f[3]);
+      if (!gh || (url && enGitHub(f[3], gh) && mismaTapa(f[3], nom))) return;
+      if (!url || mismaTapa(f[3], nom)) {
+        // la carátula está en el Drive: pasa a GitHub, sin volver a pedirle nada a TikTok ni a Instagram
+        try { var m = guardarMiniatura('', nom, f[3], gh); } catch (e) { f[8] = falla(e); return; }
+        if (m) { f[3] = m; f[8] = ''; pasadas++; Utilities.sleep(1000); return; }
+      }
+      // (una de antes, que en TikTok era el primer cuadro del video, o en el Drive ya no estaba: se completa todo de
+      // nuevo, con la carátula de TikTok o de Instagram)
+    }
     var nueva;
     try {
-      var d = red(u) === 'tiktok' ? leerTikTok(u) : leerInstagram(u);
-      var mini = guardarMiniatura(d.portada, red(u) + '-' + d.id, f && f[3]);
+      var d = red(u) === 'tiktok' ? leerTikTok(u) : leerInstagram(u), mini = '', nota = '';
+      try { mini = guardarMiniatura(d.portada, tapa(u, d.id), f && f[3], gh); }
+      catch (e) { nota = falla(e); mini = f ? f[3] : ''; }                // GitHub no la recibió: queda la de antes y se vuelve a probar en una hora
+      if (!mini && f && /^https?:/i.test(f[3])) mini = f[3];               // no se pudo bajar la nueva: queda la de GitHub de antes (si es de antes, se vuelve a probar en una hora)
       nueva = [u, limpiarTitulo(d.titulo), d.autor || '', mini, d.views == null ? '' : d.views, d.likes == null ? '' : d.likes, d.id, new Date(),
-        mini ? '' : 'Sin miniatura: se vuelve a probar en una hora'];
+        nota || (mini ? '' : 'Sin miniatura: se vuelve a probar en una hora')];
       if (f) [1, 2, 4, 5].forEach(function (k) { if (nueva[k] === '' && f[k] !== '') nueva[k] = f[k]; });   // lo que esta vez no vino, queda como estaba
-      hechos++;
+      if (!nota) hechos++;
     } catch (e) {
-      fallas++;
       nueva = f ? f.slice() : [u, '', '', '', '', '', '', '', ''];
-      nueva[7] = new Date(); nueva[8] = String(e && e.message || e);
+      nueva[7] = new Date(); nueva[8] = falla(e);
     }
     if (i == null) { fila[u] = filas.length; filas.push(nueva); } else filas[i] = nueva;
-    Utilities.sleep(400);
+    Utilities.sleep(red(u) === 'tiktok' ? 2000 : 400);                   // a TikTok, de a poco
   });
   if (filas.length) sh.getRange(2, 1, filas.length, COLUMNAS.length).setValues(filas);
-  return { links: links.length, hechos: hechos, fallas: fallas };
+  return { links: links.length, hechos: hechos, pasadas: pasadas, fallas: fallas, error: error };
 }
 
 // Para ver qué encuentra el script, sin guardar nada: elegir «probarRedes» arriba, Ejecutar y mirar el registro de
-// ejecución (abajo). Prueba el primer link de TikTok y el primero de Instagram de Trabajos.
+// ejecución (abajo). Prueba cada link de TikTok y de Instagram de Trabajos.
 function probarRedes() {
-  var tr = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Trabajos'), hecho = {};
+  var tr = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Trabajos'), hecho = {}, n = 0;
   tr.getRange(2, 1, Math.max(1, tr.getLastRow() - 1), 1).getValues().forEach(function (r) {
     var u = String(r[0]).trim(), k = red(u);
-    if (!k || hecho[k]) return;
-    hecho[k] = 1;
+    if (!k || hecho[u]) return;
+    hecho[u] = 1; n++;
     try { Logger.log(u + '\n' + JSON.stringify(k === 'tiktok' ? leerTikTok(u) : leerInstagram(u), null, 1)); }
     catch (e) { Logger.log(u + '\nNo anduvo: ' + (e && e.message || e)); }
+    Utilities.sleep(k === 'tiktok' ? 2000 : 400);
   });
-  if (!hecho.tiktok && !hecho.instagram) Logger.log('No hay links de TikTok ni de Instagram en Trabajos');
+  if (!n) Logger.log('No hay links de TikTok ni de Instagram en Trabajos');
 }
 
 function red(u) {                                                          // como en la web (js/data.js)
@@ -305,9 +331,9 @@ function leerTikTok(link) {
   }
   if (!id) id = String((leerJSON(traer('https://www.tiktok.com/oembed?url=' + encodeURIComponent(link))) || {}).embed_product_id || '');
   if (!/^\d+$/.test(id)) throw new Error('No encontré el video: ¿el link está bien?');
-  var d = datosTikTokEmbed(texto(traer('https://www.tiktok.com/embed/v2/' + id))) || {};
+  var d = datosTikTokEmbed(textoTikTok('https://www.tiktok.com/embed/v2/' + id)) || {};
   if (!d.portada || d.views == null) {
-    var p = datosTikTokPagina(texto(traer(pagina || 'https://www.tiktok.com/@/video/' + id)));
+    var p = datosTikTokPagina(textoTikTok(pagina || 'https://www.tiktok.com/@/video/' + id));
     if (p) d = mezclar(d, p);
   }
   if (!d.titulo && !d.portada && d.views == null) throw new Error('TikTok no pasó los datos del video (o está borrado o es privado)');
@@ -315,12 +341,24 @@ function leerTikTok(link) {
   return d;
 }
 
+// TikTok contesta «overload-protect triggered» (error 503) cuando se le piden varios videos seguidos: se espera un poco y
+// se vuelve a pedir (a los 2, 4, 8 y 16 segundos)
+function textoTikTok(url) {
+  for (var i = 0, espera = 2000; i < 5; i++, espera *= 2) {
+    var r = traer(url), apurado = !r || r.code === 429 || r.code === 503 || r.text.indexOf('overload-protect') >= 0;
+    if (!apurado) return r.code === 200 ? r.text : '';
+    if (i < 4) Utilities.sleep(espera);
+  }
+  return '';
+}
+
 function datosTikTokEmbed(html) {
   var S = jsonDeScript(html, '__FRONTITY_CONNECT_STATE__'), data = S && S.source && S.source.data, v = null;
   if (data) for (var k in data) if (data[k] && data[k].videoData && data[k].videoData.itemInfos) { v = data[k].videoData; break; }
   if (!v) return null;
   var it = v.itemInfos, au = v.authorInfos || {};
-  return { titulo: it.text || '', autor: au.nickName || au.uniqueId || '', portada: jpg([].concat(it.coversOrigin || [], it.covers || [])),
+  // la carátula: la que muestra TikTok (covers). coversOrigin es el primer cuadro del video, que a veces es blanco
+  return { titulo: it.text || '', autor: au.nickName || au.uniqueId || '', portada: jpg(sinMarca([].concat(it.covers || [], it.coversOrigin || []))),
     views: numero(it.playCount), likes: numero(it.diggCount) };
 }
 
@@ -329,7 +367,7 @@ function datosTikTokPagina(html) {
   var vd = S && S.__DEFAULT_SCOPE__ && S.__DEFAULT_SCOPE__['webapp.video-detail'], it = vd && vd.itemInfo && vd.itemInfo.itemStruct;
   if (!it) return null;
   var au = it.author || {}, vi = it.video || {}, s1 = it.stats || {}, s2 = it.statsV2 || {};
-  return { titulo: it.desc || '', autor: au.nickname || au.uniqueId || '', portada: jpg([vi.originCover, vi.cover]),
+  return { titulo: it.desc || '', autor: au.nickname || au.uniqueId || '', portada: jpg(sinMarca([vi.cover, vi.originCover])),   // como arriba: la de verdad, no el primer cuadro
     views: numero(s1.playCount != null ? s1.playCount : s2.playCount), likes: numero(s1.diggCount != null ? s1.diggCount : s2.diggCount) };
 }
 
@@ -361,15 +399,99 @@ function datosInstagram(html) {
     portada: portada, views: null, likes: numero(buscar(html, /class="SocialProof"[\s\S]{0,300}?>\s*([\d.,]+)\s*(?:likes?|Me gusta)/i)) };
 }
 
-// ---------------- las miniaturas, en el Drive ----------------
-function guardarMiniatura(url, nombre, anterior) {
-  if (anterior) try { if (!DriveApp.getFileById(anterior).isTrashed()) return anterior; } catch (e) { /* la borraron: se baja de nuevo */ }
-  if (!url) return '';
-  var r = traer(url, { imagen: true }), tipo = r && r.blob ? String(r.blob.getContentType()).split(';')[0] : '';
-  if (!r || r.code !== 200 || !/^image\//.test(tipo)) return '';
-  var f = carpetaMiniaturas().createFile(r.blob.setName(nombre + '.' + ({ 'image/png': 'png', 'image/webp': 'webp' }[tipo] || 'jpg')));
+// ---------------- las carátulas ----------------
+// Lo que va en la columna Miniatura: con GitHub conectado, la dirección de la carátula en jsDelivr; si no, el ID del
+// archivo en la carpeta del Drive. «anterior» es lo que ya estaba en la columna: si sirve, queda (y si estaba en el
+// Drive y ahora está GitHub, pasa a GitHub). Si no hay, se baja la de TikTok o la de Instagram (url).
+function guardarMiniatura(url, nombre, anterior, gh) {
+  anterior = String(anterior || '');
+  var blob = null;
+  if (/^https?:/i.test(anterior)) {
+    var igual = mismaTapa(anterior, nombre);                               // si no, es una de antes (la de TikTok era el primer cuadro): se baja de nuevo
+    if (!gh || (igual && enGitHub(anterior, gh))) return anterior;
+    if (igual) blob = imagen(anterior);                                    // de otro repositorio: se sube a este
+  } else if (anterior) try {
+    var a = DriveApp.getFileById(anterior);
+    if (!a.isTrashed() && a.getName().replace(/\.\w+$/, '') === nombre) { if (!gh) return anterior; blob = a.getBlob(); }
+  } catch (e) { /* la borraron: se baja de nuevo */ }
+  if (!blob && url) blob = imagen(url);
+  if (!blob) return '';
+  var archivo = nombre + '.' + ({ 'image/png': 'png', 'image/webp': 'webp' }[tipoDe(blob)] || 'jpg');
+  if (gh) return subirGitHub(gh, 'caratulas/' + archivo, blob);
+  var f = carpetaMiniaturas().createFile(blob.setName(archivo));
   try { f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { /* ya la comparte la carpeta */ }
   return f.getId();
+}
+
+function imagen(url) {                                                     // la imagen de esa dirección (o null)
+  var r = traer(url, { imagen: true });
+  return r && r.code === 200 && r.blob && /^image\//.test(tipoDe(r.blob)) ? r.blob : null;
+}
+function tipoDe(blob) { return String(blob.getContentType() || '').split(';')[0].trim().toLowerCase(); }
+
+// ---------------- en GitHub ----------------
+// El Drive no le muestra las imágenes a quien no tiene una cuenta de Google abierta (contesta «error 429»): las carátulas
+// van a un repositorio público de GitHub, aparte del de la web, y la web las muestra desde jsDelivr (gratis y rápido). La
+// dirección de cada una lleva el commit en el que se subió, así no cambia nunca.
+// El repositorio y el token quedan en las propiedades del script (Configuración del proyecto > Propiedades del script).
+function conectarGitHub() {
+  var ui = SpreadsheetApp.getUi();
+  var a = ui.prompt('Conectar GitHub (1 de 2)', 'El repositorio de las carátulas: usuario/nombre (o su dirección de GitHub).', ui.ButtonSet.OK_CANCEL);
+  if (a.getSelectedButton() !== ui.Button.OK) return;
+  var repo = String(a.getResponseText()).trim().replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '').replace(/\/+$/, '').replace(/\.git$/i, '');
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { ui.alert('Así no lo encuentro: tiene que ser usuario/nombre, por ejemplo lilsanguchito/caratulas-portfolio.'); return; }
+  var b = ui.prompt('Conectar GitHub (2 de 2)', 'El token (empieza con github_pat_).', ui.ButtonSet.OK_CANCEL);
+  if (b.getSelectedButton() !== ui.Button.OK) return;
+  var gh = { repo: repo, token: String(b.getResponseText()).trim() }, r = ghApi(gh, 'get', '');
+  if (!r || r.code !== 200 || !r.json || !r.json.full_name) {
+    ui.alert('No pude entrar a ' + repo + ': ' + (!r ? 'GitHub no contestó.' : r.code === 401 ? 'GitHub no acepta ese token (¿se copió entero?).' :
+      r.code === 404 ? 'no lo encuentro (¿el nombre está bien?).' : 'GitHub contestó con el código ' + r.code + '.'));
+    return;
+  }
+  if (r.json.private) { ui.alert(r.json.full_name + ' es privado: tiene que ser público para que la web pueda mostrar las carátulas (en GitHub, Settings > Change visibility).'); return; }
+  gh.repo = r.json.full_name;
+  PropertiesService.getScriptProperties().setProperties({ ghRepo: gh.repo, ghToken: gh.token });
+  var s = completarRedes();
+  ui.alert('GitHub conectado', s ? resumen(s) + (s.error ? '\n\nEl primer problema: ' + s.error : '') :
+    'El script ya estaba corriendo: las carátulas pasan a GitHub en la próxima vuelta (en menos de una hora).', ui.ButtonSet.OK);
+}
+
+function github() {                                                        // el repositorio y el token, si ya se conectó
+  var P = PropertiesService.getScriptProperties(), repo = P.getProperty('ghRepo'), token = P.getProperty('ghToken');
+  return repo && token ? { repo: repo, token: token } : null;
+}
+function enGitHub(v, gh) { return String(v).indexOf('https://cdn.jsdelivr.net/gh/' + gh.repo + '@') === 0; }
+function tapa(u, id) { return red(u) + '-' + id + (red(u) === 'tiktok' ? '-portada' : ''); }   // el nombre de la carátula de cada video
+function mismaTapa(v, nombre) { var m = String(v).match(/\/caratulas\/([^\/?#]+)\.\w+$/); return !!m && m[1] === nombre; }
+
+function ghApi(gh, metodo, ruta, cuerpo) {
+  var o = { method: metodo, muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + gh.token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } };
+  if (cuerpo) { o.contentType = 'application/json'; o.payload = JSON.stringify(cuerpo); }
+  try {
+    var r = UrlFetchApp.fetch('https://api.github.com/repos/' + gh.repo + ruta, o), j = null;
+    try { j = JSON.parse(r.getContentText()); } catch (e) { j = null; }
+    return { code: r.getResponseCode(), json: j };
+  } catch (e) { return null; }                                             // sin conexión
+}
+
+// Sube la carátula (si ya estaba, la reemplaza) y devuelve su dirección en jsDelivr.
+function subirGitHub(gh, ruta, blob) {
+  var cuerpo = { message: 'Carátula ' + ruta.split('/').pop(), content: Utilities.base64Encode(blob.getBytes()) }, r = null;
+  for (var i = 0; i < 3; i++) {
+    r = ghApi(gh, 'put', '/contents/' + ruta, cuerpo);
+    if (r && (r.code === 200 || r.code === 201) && r.json && r.json.commit && r.json.commit.sha)
+      return 'https://cdn.jsdelivr.net/gh/' + gh.repo + '@' + r.json.commit.sha + '/' + ruta;
+    if (!r || (r.code !== 409 && r.code !== 422)) break;
+    var v = ghApi(gh, 'get', '/contents/' + ruta);                         // ya estaba (o cambió justo): se reemplaza la de ahora
+    if (v && v.code === 200 && v.json && v.json.sha) cuerpo.sha = v.json.sha;
+    Utilities.sleep(1000);
+  }
+  var c = r ? r.code : 0, m = r && r.json && r.json.message ? String(r.json.message) : '';
+  if (c === 401) throw new Error('GitHub no acepta más el token (venció o se borró): hacer otro y Portfolio > Conectar GitHub (carátulas)');
+  if (/rate limit/i.test(m)) throw new Error('GitHub pidió esperar (muchas subidas seguidas): se vuelve a probar en una hora');
+  if (/empty/i.test(m)) throw new Error('El repositorio ' + gh.repo + ' está vacío: en GitHub, Add file > Create new file, cualquier archivo, y Commit');
+  if (c === 403 || c === 404) throw new Error('El token no puede subir archivos a ' + gh.repo + ': tiene que tener Contents: Read and write en ese repositorio');
+  throw new Error('GitHub no recibió la carátula (' + (r ? 'código ' + c + (m ? ': ' + m : '') : 'no contestó') + ')');
 }
 
 function carpetaMiniaturas() {
@@ -397,6 +519,11 @@ function texto(r) { return r && r.code === 200 ? r.text : ''; }
 function leerJSON(r) { try { return r && r.code === 200 ? JSON.parse(r.text) : null; } catch (e) { return null; } }
 function buscar(t, re) { var m = String(t || '').match(re); return !m ? '' : m.length > 1 ? m[1] || '' : m[0]; }   // lo del paréntesis, o todo
 function mezclar(a, b) { for (var k in b) if (a[k] == null || a[k] === '') a[k] = b[k]; return a; }
+function sinMarca(a) {                                                     // sin las que tienen la marca de agua de TikTok, si hay otras
+  a = a.filter(function (u) { return u; });
+  var b = a.filter(function (u) { return !/logom/i.test(u); });
+  return b.length ? b : a;
+}
 function jpg(a) {                                                          // de las portadas, mejor una en JPG
   a = a.filter(function (u) { return u; });
   for (var i = 0; i < a.length; i++) if (/\.jpe?g(\?|$)/i.test(a[i])) return a[i];

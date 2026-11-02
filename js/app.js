@@ -3,6 +3,10 @@
    js/config.js tiene la key y la planilla, y si no, los de ejemplo (js/mock-data.js), con la misma forma. */
 (function () {
   'use strict';
+  // Prueba «crudo»: cada video con su reproductor tal cual viene (sus controles, sin recortarlo, sin nada nuestro
+  // encima y sin tocarle el sonido, los subtítulos ni el final). Con false vuelven los controles nuestros y los recortes
+  var CRUDO = true;
+  document.documentElement.classList.toggle('crudo', CRUDO);
   // las imágenes aparecen suave cuando terminan de cargar (el fundido está en el CSS): acá se marca cada una
   document.addEventListener('load', function (e) { var t = e.target; if (t && t.tagName === 'IMG') t.classList.add('ok'); }, true);
   // la pantalla de carga se va cuando la página está lista (y, si algo se traba, igual a los 12 segundos)
@@ -142,9 +146,15 @@
   function face(w) {
     var ch = w.channelId ? channels[w.channelId] : null;
     if (ch) return '<a class="yt-av" href="' + esc(chUrl(ch)) + '" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true" draggable="false">' +
-      '<img src="' + esc(ch.snippet.thumbnails.medium.url) + '" alt="" loading="lazy" draggable="false"></a>';
+      '<img src="' + esc(ch.snippet.thumbnails.medium.url) + '" alt="" loading="lazy" decoding="async" draggable="false"></a>';
     if (w.who) return '<span class="yt-av ini" aria-hidden="true">' + esc(w.who.charAt(0).toUpperCase()) + '</span>';   // fuera de YouTube: la inicial
     return '';
+  }
+  // un TikTok sin carátula (TikTok no se la pasó al script de la planilla): su primer cuadro, del reproductor de TikTok
+  // mismo, en pausa y sin sus botones (recortado como estaba el grande: solo el video); el clic es de la tarjeta
+  function ttCap(id) {
+    return '<iframe class="tt-cap" src="https://www.tiktok.com/player/v1/' + esc(id) + '?autoplay=0&rel=0&controls=0&progress_bar=0&play_button=0&volume_control=0' +
+      '&fullscreen_button=0&timestamp=0&music_info=0&description=0&native_context_menu=0&closed_caption=0" loading="lazy" tabindex="-1" aria-hidden="true"></iframe>';
   }
   function card(w) {
     var ch = w.channelId ? channels[w.channelId] : null;
@@ -154,7 +164,7 @@
     var views = w.views != null ? '<span class="yt-v">' + EYE + ' ' + abbr(w.views) + '<span class="sr"> views</span></span>' : '';
     return '<div class="work' + (w.vertical ? ' v' : '') + '" data-work="' + w.id + '">' +
       '<button class="thumb ' + (w.vertical ? 'r916' : 'r169') + '" type="button" aria-label="' + esc('Ver “' + w.title + '”') + '">' +
-      (w.thumb ? '<img src="' + esc(w.thumb) + '" alt="" loading="lazy" decoding="async" draggable="false">' : '') +
+      (w.thumb ? '<img src="' + esc(w.thumb) + '" alt="" loading="lazy" decoding="async" draggable="false">' : LIVE && w.tt ? ttCap(w.tt) : '') +
       (w.dur ? '<span class="dur">' + w.dur + '</span>' : '') + '</button>' +
       '<div class="yt-m">' + (w.vertical ? '' : face(w)) + '<div class="yt-t"><span class="yt-ttl">' + esc(w.title) + '</span>' +
       (name || views ? '<span class="yt-s">' + name + views + '</span>' : '') + '</div></div></div>';
@@ -179,13 +189,30 @@
     setTimeout(function () { [YT, RP].forEach(function (S) { if (S.later && !HELD) { S.later = false; paint(S); } }); }, 120);
   }
   var DLGS = document.getElementsByTagName('dialog');     // (siempre al día: mirar si hay una ventana abierta es barato)
-  requestAnimationFrame(function frame(now) {
+  // El cuadro se pide solo mientras alguna fila anda: con todas quietas (fuera de la pantalla, con una ventana abierta,
+  // agarradas) no se pide ninguno y el celular no trabaja de más mientras se scrollea o se mira un video. Lo que puede
+  // volver a moverlas lo despierta (wake): que asomen, soltarlas, abrir o cerrar una ventana, volver a la pestaña
+  var loop = 0;
+  function frame(now) {
+    loop = 0;
     modal = false;                                         // una ventana abierta (no el mini): las filas de la página, quietas
     for (var i = 0; i < DLGS.length; i++) if (DLGS[i].open && DLGS[i].classList.contains('dlg') && !DLGS[i].classList.contains('mini')) modal = true;
     if (modal !== PAGE.classList.contains('still')) PAGE.classList.toggle('still', modal);
-    belts.forEach(function (f) { f(now); });
-    requestAnimationFrame(frame);
-  });
+    var more = false;
+    belts.forEach(function (f) { if (f(now)) more = true; });
+    if (more) loop = requestAnimationFrame(frame);
+  }
+  function wake() { if (!loop) loop = requestAnimationFrame(frame); }
+  wake();
+  if (window.MutationObserver) {                           // abrir, cerrar o achicar una ventana
+    var dlgMo = new MutationObserver(wake);
+    [].forEach.call(DLGS, function (d) { dlgMo.observe(d, { attributes: true, attributeFilter: ['open', 'class'] }); });
+  }
+  document.addEventListener('visibilitychange', wake);
+  (function () {                                           // window.__snap (para las capturas): al sacarlo, siguen andando
+    var snap = !!window.__snap;
+    try { Object.defineProperty(window, '__snap', { configurable: true, get: function () { return snap; }, set: function (x) { snap = x; wake(); } }); } catch (e) {}
+  })();
   function carousel(track, n) {
     // A cada lado de los videos va una copia de la tanda completa. Cuando la fila entra en la zona de
     // copias, salta en silencio a la posición igual de la tanda original, así después del último viene
@@ -218,6 +245,7 @@
       vel = Math.max(-MAXV, Math.min(MAXV, vel || 0));
       if (Math.abs(vel) > SPEED / 2) dir = vel > 0 ? 1 : -1;   // sigue para el lado al que la empujaste
       v = dir * Math.max(Math.abs(vel), SPEED);        // nunca más lento que su velocidad de siempre
+      wake();
     }
     function build() {
       var keep = idx;                                  // el video que estaba primero (medido antes del cambio de ancho)
@@ -243,6 +271,7 @@
       setW = posOf(track.children[originals.length * 2]) - start;
       track.dataset.home = start;
       track.scrollLeft = start + posOf(originals[keep]) - posOf(originals[0]);
+      wake();
     }
     function wrap(x) {                                 // la misma vista, dentro de la tanda original
       if (!looped) return x;
@@ -254,8 +283,8 @@
       var dt = last ? Math.min(50, now - last) : 16;
       last = now;
       if (inDlg === null && track.isConnected) inDlg = !!track.closest('dialog');   // si está en una ventana (se mira una vez)
-      if (!looped || reduce || document.hidden || window.__snap || focused || (drag && drag.on) || wh.on || (!inDlg && modal)) return halt();   // con una ventana abierta, las de la página quietas (no se ven); si no, giran siempre
-      if (!inView) { halt(); v = dir * SPEED; return; }   // fuera de la pantalla espera, ya a su velocidad
+      if (!looped || reduce || document.hidden || window.__snap || focused || (drag && drag.on) || wh.on || (!inDlg && modal)) { last = 0; return halt(); }   // con una ventana abierta, las de la página quietas (no se ven); si no, giran siempre
+      if (!inView) { last = 0; halt(); v = dir * SPEED; return; }   // fuera de la pantalla espera, ya a su velocidad
       if (!running) { running = true; pos = track.scrollLeft; }
       v = dir * SPEED + (v - dir * SPEED) * Math.exp(-dt / GLIDE);
       pos = wrap(pos + v * dt / 1000);                 // terminó la tanda: la misma vista, sin corte
@@ -264,10 +293,11 @@
       var off = track.scrollLeft - pos;
       if (off > 1 || off < -1) { pos = track.scrollLeft; off = 0; }   // si el scroll no la siguió, no se acumula el corrimiento
       sub(off);
+      return true;                                     // sigue andando: otro cuadro
     };
-    belts.push(belt);
+    belts.push(belt); wake();
     track.addEventListener('focusin', function () { focused = Date.now() - lastTab < 800; });   // recorriéndola con Tab, se queda quieta (el clic o volver de una ventana no cuentan)
-    track.addEventListener('focusout', function () { focused = false; });
+    track.addEventListener('focusout', function () { focused = false; wake(); });
     // trackpad o shift + rueda, de costado: la empujan; para arriba o para abajo es la página y la fila sigue
     var wh = { on: false, t: 0, v: 0, timer: 0 };
     track.addEventListener('wheel', function (e) {
@@ -322,7 +352,7 @@
     track.addEventListener('pointercancel', end);
     track.addEventListener('click', function (e) { if (moved) { e.preventDefault(); e.stopPropagation(); moved = false; } }, true);
     // anda desde un poco antes de asomar en la pantalla, así al scrollear ya llega moviéndose
-    var io = window.IntersectionObserver ? new IntersectionObserver(function (es) { inView = es[0].isIntersecting; }, { threshold: 0, rootMargin: '200px 0px' }) : null;
+    var io = window.IntersectionObserver ? new IntersectionObserver(function (es) { inView = es[es.length - 1].isIntersecting; if (inView) wake(); }, { threshold: 0, rootMargin: '200px 0px' }) : null;
     if (io) io.observe(track);
     var lastW = 0, ro = window.ResizeObserver ? new ResizeObserver(function () {
       if (track.clientWidth !== lastW) { lastW = track.clientWidth; build(); }
@@ -443,6 +473,7 @@
       var s = { w: w, t: w, k: w.matches('.ch-av') ? [14, 10, 1.05] : [30, 24, 1.18], rx: 0, ry: 0, gx: 50, gy: 0, sc: 1, on: false, trx: 0, tRy: 0, tgx: 50, tgy: 0, tsc: 1 };   // la del canal de arriba es grande: se inclina menos
       s.t.style.setProperty('--s', '1');
       live.push(s); w.classList.add('tilt');
+      tickOn();
       return s;
     };
     var aim = function (w, x, y) {                   // la inclinación se mide sobre la foto quieta
@@ -467,10 +498,14 @@
       if (e.pointerType !== 'mouse') return;
       pt = [e.clientX, e.clientY]; follow(pt[0], pt[1]);
     }, { passive: true });
-    // si la página o una fila se mueve debajo del mouse quieto, pasa a activa la foto que queda abajo
-    document.addEventListener('scroll', function () { if (pt) follow(pt[0], pt[1]); }, { passive: true, capture: true });
+    // si la página o una fila se mueve debajo del mouse quieto, pasa a activa la foto que queda abajo (una vez por
+    // cuadro, aunque se muevan varias a la vez: las filas que andan solas avisan en cada cuadro)
+    var fq = 0;
+    document.addEventListener('scroll', function () { if (pt && !fq) fq = requestAnimationFrame(function () { fq = 0; if (pt) follow(pt[0], pt[1]); }); }, { passive: true, capture: true });
     document.addEventListener('mouseout', function (e) { if (!e.relatedTarget) { pt = null; if (hot) { drop(hot); hot = null; } } });
-    if (!flat) requestAnimationFrame(function tick(now) {
+    var ticking = false;                               // el cuadro, solo mientras alguna foto se inclina o vuelve
+    var tickOn = function () { if (!ticking && !flat) { ticking = true; tl = 0; requestAnimationFrame(tick); } };
+    var tick = function (now) {
       var dt = tl ? Math.min(50, now - tl) : 16, a = 1 - Math.exp(-dt / 90);
       tl = now;
       for (var i = live.length - 1; i >= 0; i--) {
@@ -487,8 +522,8 @@
         s.t.style.setProperty('--gy', s.gy.toFixed(1) + '%');
         s.t.style.setProperty('--s', s.sc.toFixed(4));
       }
-      requestAnimationFrame(tick);
-    });
+      if (live.length) requestAnimationFrame(tick); else ticking = false;
+    };
   }
 
   // arrastrando con el mouse para deslizar (la página, las ventanas, las filas, los verticales o el mini), no se
@@ -524,7 +559,7 @@
   var channelBlock = function (w) {                    // foto, nombre y suscriptores; abre el canal
     var ch = w.channelId ? channels[w.channelId] : null;
     var subs = ch && ch.statistics && ch.statistics.subscriberCount != null ? abbr(+ch.statistics.subscriberCount) + ' de suscriptores' : '';
-    var face = ch ? '<span class="w-av"><img src="' + esc(ch.snippet.thumbnails.medium.url) + '" alt=""></span>'
+    var face = ch ? '<span class="w-av"><img src="' + esc(ch.snippet.thumbnails.medium.url) + '" alt="" decoding="async"></span>'
       : '<span class="w-av ini" aria-hidden="true">' + esc((w.who || '·').charAt(0).toUpperCase()) + '</span>';
     var who = face + '<span class="w-cht"><b>' + esc(w.who || 'Lil Sanguchito') + '</b>' + (subs ? '<span>' + subs + '</span>' : '') + '</span>';
     return ch ? '<a class="w-chl" href="' + esc(chUrl(ch)) + '" target="_blank" rel="noopener">' + who + '</a>' : '<span class="w-chl">' + who + '</span>';
@@ -636,12 +671,24 @@
   // miniatura (al abrir un video se aprieta solo). Un video que su canal no deja insertar se abre en YouTube.
   // Con los datos de ejemplo, un aviso.
   function embedOf(w, pre) {                         // pre: se carga sin arrancar (el vertical de abajo o de arriba)
-    // YouTube, siempre sin sus controles: encima van los nuestros, como los de YouTube (enablejsapi: así los manejan)
-    if (w.yt) return w.embed ? 'https://www.youtube-nocookie.com/embed/' + w.yt + '?autoplay=' + (pre ? 0 : 1) + '&playsinline=1&rel=0&enablejsapi=1&controls=0&fs=0&disablekb=1&iv_load_policy=3' +
+    // YouTube: crudo, con sus controles; si no, sin ellos y encima van los nuestros (enablejsapi: así se le avisa
+    // play y pausa al pasar de un video a otro)
+    if (w.yt) return w.embed ? 'https://www.youtube-nocookie.com/embed/' + w.yt + '?autoplay=' + (pre ? 0 : 1) + '&playsinline=1&enablejsapi=1' + (CRUDO ? '' : '&rel=0&controls=0&fs=0&disablekb=1&iv_load_policy=3') +
       (location.origin && location.origin !== 'null' ? '&origin=' + encodeURIComponent(location.origin) : '') : '';
     if (w.drive) return 'https://drive.google.com/file/d/' + w.drive + '/preview';
     if (w.ig) return 'https://www.instagram.com/p/' + w.ig + '/embed/';   // Instagram: su reproductor, con su play (no deja manejarlo desde afuera)
-    if (w.tt) return 'https://www.tiktok.com/player/v1/' + w.tt + '?autoplay=' + (pre ? 0 : 1) + '&rel=0&loop=1&controls=0&progress_bar=0&play_button=0&volume_control=0&fullscreen_button=0&timestamp=0&music_info=0&description=0&native_context_menu=0&closed_caption=0';
+    if (w.tt) return 'https://www.tiktok.com/player/v1/' + w.tt + '?autoplay=' + (pre ? 0 : 1) + (CRUDO ? '&rel=0' : '&rel=0&loop=1&controls=0&progress_bar=0&play_button=0&volume_control=0&fullscreen_button=0&timestamp=0&music_info=0&description=0&native_context_menu=0&closed_caption=0');
+    return '';
+  }
+  // crudo: encima de lo que en cada reproductor lleva a su página (el título y el logo de YouTube; la cuenta, el logo y los
+  // likes de TikTok; lo de arriba y abajo de Instagram; abrir aparte en Drive), un link invisible a lo mismo: en vez de
+  // irse, la ventanita que dice a dónde lleva. Lo que no tapa, igual no saca: los reproductores están encerrados
+  function pOut(w) {
+    var a = function (c, u, lbl) { return '<a class="p-out ' + c + '" href="' + esc(u) + '" target="_blank" rel="noopener" aria-label="' + esc(lbl) + '" draggable="false"></a>'; };
+    if (w.tt) { var at = (w.out.match(/tiktok\.com\/(@[\w.-]+)/) || [])[1]; return a('tt-l', at ? 'https://www.tiktok.com/' + at : w.out, 'La cuenta en TikTok') + a('tt-r', w.out, 'Ver en TikTok') + a('tt-s', w.out, 'Ver en TikTok'); }
+    if (w.yt) return a('yt-t', w.out, 'Ver en YouTube') + a('yt-l', w.out, 'Ver en YouTube');
+    if (w.ig) return a('ig-t', w.out, 'Ver en Instagram') + a('ig-b', w.out, 'Ver en Instagram');
+    if (w.drive) return a('dr-x', w.out, 'Ver en Drive');
     return '';
   }
   function playHere(btn, stage, w, pre) {
@@ -650,12 +697,14 @@
     if (!pre && btn) btn.hidden = true;
     if (src) {
       var f = document.createElement('iframe');
+      if (CRUDO) f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');   // crudo: ningún reproductor puede llevarte afuera solo (ni pestañas nuevas ni irse de la página)
       f.src = src; f.setAttribute('aria-label', w.title);   // sin title: nada de cartelitos del navegador
       f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.allowFullscreen = true;
       f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin'); f.className = (w.yt ? 'yt' : w.tt ? 'tt' : w.ig ? 'ig' : 'dr') + (pre ? ' pre' : '');
       f.addEventListener('load', function () { f.dataset.ok = '1'; });
       stage.insertBefore(f, stage.querySelector('.vp'));   // debajo de los controles
-      if (!pre) stage.classList.add('playing'); stage.classList.toggle('dr', !!(w.drive || w.ig));   // Drive e Instagram: su reproductor, a la vista y sin los nuestros encima
+      if (CRUDO && LIVE) { [].forEach.call(stage.querySelectorAll('.p-out'), function (x) { x.remove(); }); stage.insertAdjacentHTML('beforeend', pOut(w)); }
+      if (!pre) stage.classList.add('playing'); stage.classList.toggle('dr', CRUDO || !!(w.drive || w.ig));   // Drive e Instagram (y todos, crudo): su reproductor, a la vista y sin los nuestros encima
       return;
     }
     if (pre) return;
@@ -667,7 +716,7 @@
     if (!stage) return;
     if (fsEl() && stage.contains(fsEl())) fsExit();
     if (RP.f && stage.contains(RP.f)) pReset(RP);
-    [].forEach.call(stage.querySelectorAll('iframe, .msg'), function (x) { x.remove(); });
+    [].forEach.call(stage.querySelectorAll('iframe, .msg, .p-out'), function (x) { x.remove(); });
     stage.classList.remove('playing', 'live', 'seen', 'yield', 'fin', 'dr');
     var pl = stage.querySelector('.play'); if (pl) pl.hidden = false;
     vpReset(stage.querySelector('.vp'));
@@ -736,7 +785,7 @@
   placeSide();
   function sideItem(v) {
     return '<button class="w-it" type="button" data-watch="' + v.id + '" aria-label="' + esc('Ver “' + v.title + '”') + '">' +
-      '<span class="w-th r169"><img src="' + esc(v.thumb) + '" alt="" loading="lazy" draggable="false">' + (v.dur ? '<span class="dur">' + v.dur + '</span>' : '') + '</span>' +
+      '<span class="w-th r169"><img src="' + esc(v.thumb) + '" alt="" loading="lazy" decoding="async" draggable="false">' + (v.dur ? '<span class="dur">' + v.dur + '</span>' : '') + '</span>' +
       '<span class="w-it-t"><span class="w-it-ttl">' + esc(v.title) + '</span>' + (v.who ? '<span class="w-it-s">' + esc(v.who) + '</span>' : '') +
       (v.views != null ? '<span class="w-it-s w-it-v">' + EYE + ' ' + abbr(v.views) + '<span class="sr"> views</span></span>' : '') + '</span></button>';
   }
@@ -811,7 +860,7 @@
     if (!d.open) {
       WA.now = w; WA.seq++; WA.topic = ''; if (wChips) wChips.set('');   // cada vez que se abre, con Todo
       fillStage(w); fillMeta(w); fillList(listFor(w));
-      show(d); setTimeout(WB, 320);
+      show(d); setTimeout(WB, 320); wPullTop();
       // cada video que abrís arranca arriba de todo: la lista, la columna del video y lo de abajo en el celular.
       // Va después de abrir la ventana, porque cerrada no tiene scroll y el navegador volvía a donde había quedado
       ['#w-scroll', '#w-list', '#w-main', '#w-body'].forEach(function (s) { var el = $(s); if (el) el.scrollTop = 0; });
@@ -870,11 +919,42 @@
   function reopen(mini) {                             // la misma ventana, grande o chica, al toque (solo cambia su clase): el video sigue sonando
     if (!WD.open) show(WD);
     setMini(mini);
+    if (!mini) wPullTop();
     if (mini) { miOn = null; paintMini(); try { PAGE.focus({ preventScroll: true }); } catch (e) {} }
     else { try { WD.querySelector('.panel').focus({ preventScroll: true }); } catch (e) {} requestAnimationFrame(fitDesc); setTimeout(WB, 320); }
     WB();
   }
   function closeWatch() { if (fsEl()) fsExit(); if (!isMini() && hasVideo()) reopen(true); else WD.close(); }
+  // crudo, en el celular y la tablet: bajar el video para achicarlo, con el deslizamiento del navegador, que anda también
+  // encima del reproductor (los toques siguen siendo de él). Arriba de la ventana hay un espacio vacío, fuera de la vista:
+  // bajándola, aparece; soltándola pasada la mitad, termina de bajar y queda el mini; si no, vuelve sola
+  var WP = document.createElement('i'), WPt = 0, WPv = { t: 0, y: 0, v: 0, pk: 0 };
+  var wPullOn = function () { return CRUDO && WD.open && !isMini() && WP.offsetHeight > 0; };
+  function wPullTop() { if (wPullOn()) WP.parentNode.scrollTop = WP.offsetHeight; }   // la ventana en su lugar (el espacio, afuera)
+  if (CRUDO) (function () {
+    var p = WD.querySelector('.panel');
+    WP.className = 'w-pull'; WP.setAttribute('aria-hidden', 'true'); p.insertBefore(WP, p.firstChild);
+    p.addEventListener('scroll', function () {
+      if (!wPullOn()) return;
+      var h = WP.offsetHeight, d = Math.max(0, h - p.scrollTop), k = d / (h / 2), now = performance.now();
+      if (WPv.t) WPv.v = 0.6 * WPv.v + 0.4 * ((WPv.y - p.scrollTop) / Math.max(1, now - WPv.t));   // cómo venía el dedo (px por ms; + para abajo)
+      WPv.t = now; WPv.y = p.scrollTop; if (d <= 1) WPv.pk = 0; else WPv.pk = Math.max(WPv.pk, WPv.v);   // pk: el envión más fuerte de este gesto
+      p.style.opacity = d > 1 ? fadeAt(k).toFixed(3) : '';
+      if (d > 1) WD.style.setProperty('--bd', Math.max(0, 1 - k).toFixed(3)); else WD.style.removeProperty('--bd');
+      clearTimeout(WPt); WPt = setTimeout(done, 200);   // quieto: ya se soltó (por si el navegador no avisa que terminó)
+    }, { passive: true });
+    p.addEventListener('scrollend', done);
+    function done() {
+      clearTimeout(WPt);
+      if (!wPullOn()) return;
+      var h = WP.offsetHeight, d = h - p.scrollTop, fl = WPv.pk > .6 && WPv.v > -.05 && d > 24; WPv.t = 0; WPv.v = 0; WPv.pk = 0;   // fl: lo tiraste para abajo (y no lo estabas volviendo a subir)
+      if (d <= 1) return;                                                                                  // en su lugar
+      if (d < h / 2 && !fl) return p.scrollTo({ top: h, behavior: still() ? 'auto' : 'smooth' });       // ni la mitad ni tirado: vuelve
+      p.style.opacity = ''; WD.style.removeProperty('--bd');
+      closeWatch();
+    }
+    STACK.addEventListener && STACK.addEventListener('change', function () { requestAnimationFrame(wPullTop); });
+  })();
   function hushMini() { if (!isMini()) return; if (YT.f && YT.ok) pCmd(YT, 'pause'); else WD.close(); }   // al abrir un vertical, el chico se calla
   function paintMini() {
     if (!isMini() || !WA.now) return;
@@ -1010,24 +1090,30 @@
       if (m.type === 'onStateChange' && typeof m.value === 'number') st = m.value;
       else if (m.type === 'onCurrentTime' && m.value) { S.t = +m.value.currentTime || 0; S.at = now; S.d = +m.value.duration || S.d; }
       else if (m.type === 'onMute') S.muted = !!m.value;
+      // TikTok arranca mudo y, en los primeros segundos (al empezar a sonar o con el play que se le manda), se vuelve a
+      // silenciar solo: mientras tanto, cada vez, se le pide el sonido de nuevo. Después, si lo silenciás, queda así
+      if ((CRUDO || !PREF.muted) && S.ok && S.okAt && performance.now() - S.okAt < 5000 &&
+        ((m.type === 'onMute' && m.value) || (m.type === 'onStateChange' && m.value === 1 && S.muted))) post(S.f, 'tt', 'unmute');
     } else return;
     if (!S.okAt) S.okAt = now;                        // ya está listo: avisa cómo va
-    if (!S.ok) {                                       // el primer aviso: con tu volumen y sin subtítulos, como en YouTube si no los pediste
+    if (!S.ok) {                                       // el primer aviso: con tu volumen y sin subtítulos, como en YouTube si no los pediste (crudo: como venga)
       S.ok = true;
-      if (S.kind === 'yt') post(S.f, 'yt', 'cc');
-      if (PREF.vol !== 100) { post(S.f, S.kind, 'vol', PREF.vol); S.vol = PREF.vol; }
-      if (PREF.muted) { post(S.f, S.kind, 'mute'); S.muted = true; }
-      else if (S.kind === 'tt') { post(S.f, 'tt', 'unmute'); S.muted = false; }   // TikTok arranca mudo: con sonido, como los demás
+      if (!CRUDO) {
+        if (S.kind === 'yt') post(S.f, 'yt', 'cc');
+        if (PREF.vol !== 100) { post(S.f, S.kind, 'vol', PREF.vol); S.vol = PREF.vol; }
+        if (PREF.muted) { post(S.f, S.kind, 'mute'); S.muted = true; }
+        else if (S.kind === 'tt') { post(S.f, 'tt', 'unmute'); S.muted = false; }   // TikTok arranca mudo: con sonido, como los demás
+      } else if (S.kind === 'tt') { post(S.f, 'tt', 'unmute'); S.muted = false; }   // crudo, igual: TikTok arranca mudo y va con sonido
     }
     if (st !== S.st) {
-      if (st === 1) { S.since = now; if (S.nb !== 1) S.fr = now; if (!S.on && S.kind === 'yt') post(S.f, 'yt', 'cc'); }
+      if (st === 1) { S.since = now; if (S.nb !== 1) S.fr = now; if (!CRUDO && !S.on && S.kind === 'yt') post(S.f, 'yt', 'cc'); }
       S.st = st;
       if (st !== 3) S.nb = st;                         // lo último que hizo, sin contar cuando carga un poco
     }
     if (st === 1 || st === 3) { S.on = true; if (S.t < S.d - 1) S.end = false; }   // ya arrancó: desde ahora se maneja con los de encima
     if (S.st === 1 && S.t > .05) S.seen = true;      // y ya se ve la imagen: recién ahí aparece el video
     if (st === 0) {                                    // terminó (si no se llegó a frenar antes)
-      if (S === RP) { post(S.f, S.kind, 'seek', 0); post(S.f, S.kind, 'play'); S.st = 1; S.t = 0; S.at = now; S.fr = now; S.nb = 1; }   // el vertical vuelve a empezar (YouTube muestra su pausa)
+      if (S === RP && !CRUDO) { post(S.f, S.kind, 'seek', 0); post(S.f, S.kind, 'play'); S.st = 1; S.t = 0; S.at = now; S.fr = now; S.nb = 1; }   // el vertical vuelve a empezar (YouTube muestra su pausa; crudo: su final)
       else { S.end = true; S.t = S.d; }
     }
     nearEnd(S);
@@ -1037,7 +1123,7 @@
   // justo antes del final: el horizontal se frena (queda su último cuadro y el botón de volver a verlo, sin la
   // pantalla final de YouTube) y el vertical vuelve a empezar, como en Shorts
   function nearEnd(S) {
-    if (!S.f || S.st !== 1 || !S.d || S.d < 2 || S.drag != null) return;
+    if (CRUDO || !S.f || S.st !== 1 || !S.d || S.d < 2 || S.drag != null) return;
     var t = tNow(S);
     if (t < endOf(S) - .45) { S.lp = 0; return; }
     if (S.lp) return;
@@ -1063,7 +1149,7 @@
     var box = vpOf(S);
     if (box) paintBox(box, S);
     if (S === YT) { paintStage(); paintMini(); } else paintReel();
-    if (S.st === 1 && !LOOP) LOOP = requestAnimationFrame(tick);
+    if (S.st === 1 && !LOOP && !CRUDO) LOOP = requestAnimationFrame(tick);   // crudo: los controles son los del reproductor (los nuestros no se ven): sin cuadro a cuadro mientras suena
   }
   function paintBox(box, S) {                         // el play o la pausa (o volver a ver), el volumen y la barrita
     var on = sounds(S) && !S.end, lv = S.on || (S.kind === 'tt' && !!S.f), c = box.classList;
@@ -1243,7 +1329,7 @@
   }, true);
   // las teclas de YouTube, con el reproductor grande abierto
   document.addEventListener('keydown', function (e) {
-    if (!WD.open || isMini() || !YT.f || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (CRUDO || !WD.open || isMini() || !YT.f || e.altKey || e.ctrlKey || e.metaKey) return;   // crudo: las de YouTube, con el foco en su reproductor
     var tg = e.target, k = e.key, done = true;
     if (tg.closest && tg.closest('input, textarea, select, [contenteditable]')) return;
     if ((k === ' ' || k === 'Enter') && tg.closest && tg.closest('button, a')) return;   // un botón con el foco: lo aprieta
@@ -1270,7 +1356,7 @@
   var kindOf = function (f) { return f.classList.contains('yt') ? 'yt' : f.classList.contains('tt') ? 'tt' : ''; };
   function reelPre(it) {
     var w = it && byId[it.dataset.short], v = it && it.querySelector('.sh-v');
-    if (!(w && v && LIVE && !reelFrame(it) && embedOf(w, true))) return false;
+    if (!(w && v && LIVE && !w.tt && !reelFrame(it) && embedOf(w, true))) return false;   // TikTok no: sin arrancar solo, su reproductor no hace caso (ni play ni sonido) hasta que se toca su play; se carga al llegar
     playHere(v.querySelector('.play'), v, w, true); if (w.yt) warm(reelFrame(it));
     return true;
   }
@@ -1291,7 +1377,7 @@
     var f = W.f;
     if (!f.isConnected) return;
     if (f.classList.contains('pre')) { post(f, 'yt', 'pause'); post(f, 'yt', 'seek', 0); }
-    if (!PREF.muted) post(f, 'yt', 'unmute');
+    if (CRUDO || !PREF.muted) post(f, 'yt', 'unmute');   // (crudo: con sonido, como viene)
   }
   function warmMsg(e) {                              // lo que avisa un precargado mientras carga
     var W = null;
@@ -1331,7 +1417,7 @@
     var W = f._warm;
     if (W && !W.done) {                               // se estaba cargando: arranca desde el principio y con sonido
       W.done = true; var k = WARM.indexOf(W); if (k >= 0) WARM.splice(k, 1);
-      post(f, 'yt', 'seek', 0); if (!PREF.muted) post(f, 'yt', 'unmute');
+      post(f, 'yt', 'seek', 0); if (CRUDO || !PREF.muted) post(f, 'yt', 'unmute');
     }
     f.classList.remove('pre'); v.classList.add('playing'); if (pb) pb.hidden = true;
     reelHook(it); pStart(RP); reelWait(v);
@@ -1509,7 +1595,7 @@
     // desde cualquier parte del video (sonando, en pausa o antes de arrancar), también desde sus botones
     // (tocándolos sin arrastrar, se aprietan)
     stage.addEventListener('pointerdown', function (e) {
-      if (isMini() || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      if (isMini() || (e.pointerType === 'mouse' && e.button !== 0) || (CRUDO && e.pointerType !== 'mouse')) return;   // crudo, con el dedo: el deslizamiento del navegador
       g = { id: e.pointerId, x: e.clientX, y: e.clientY, dy: 0, on: false, up: false, mouse: e.pointerType === 'mouse', btn: !!e.target.closest('button') };
     });
     // Mientras se arrastra, la ventana sigue al dedo (una vez por cuadro, solo para abajo), difuminándose. Al soltar, sin pasos
@@ -1734,7 +1820,7 @@
   var ICON = { views: EYE, desc: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4V6a2 2 0 0 1 1-1.73" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 9h8M8 13h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' };
   function shortItem(w) {
     var ch = w.channelId ? channels[w.channelId] : null;
-    var av = ch ? '<span class="sh-av"><img src="' + esc(ch.snippet.thumbnails.medium.url) + '" alt="" draggable="false"></span>'
+    var av = ch ? '<span class="sh-av"><img src="' + esc(ch.snippet.thumbnails.medium.url) + '" alt="" decoding="async" draggable="false"></span>'
       : w.who ? '<span class="sh-av ini" aria-hidden="true">' + esc(w.who.charAt(0).toUpperCase()) + '</span>' : '';
     var who = !w.who ? '' : ch ? '<a class="sh-ch" href="' + esc(chUrl(ch)) + '" target="_blank" rel="noopener" draggable="false">' + av + '<b>' + esc(w.who) + '</b></a>'
       : '<span class="sh-ch">' + av + '<b>' + esc(w.who) + '</b></span>';
@@ -1746,11 +1832,11 @@
     var foot = (w.who ? (ch ? '<a class="sd-ch" href="' + esc(chUrl(ch)) + '" target="_blank" rel="noopener">' + av + '<b>' + esc(w.who) + '</b></a>' : '<span class="sd-ch">' + av + '<b>' + esc(w.who) + '</b></span>') : '') +
       actsHTML(w);
     return '<article class="sh-it" data-short="' + w.id + '" aria-label="' + esc(w.title) + '">' +
-      '<div class="sh-v"><img src="' + esc(w.thumb) + '" alt="" draggable="false">' +
+      (CRUDO ? '<div class="sh-sw"><i class="sh-sp"></i>' : '') + '<div class="sh-v"><img src="' + esc(w.thumb) + '" alt="" decoding="async" draggable="false">' +
       '<button class="play' + (LIVE && embedOf(w) ? ' auto' : '') + '" type="button" aria-label="' + esc('Reproducir “' + w.title + '”') + '"><span>▶</span></button>' +
       '<div class="sh-info">' + who + '<p class="sh-ttl">' + esc(w.title) + '</p>' +
       (text ? '<button class="sh-more" type="button" aria-expanded="false">…más</button><div class="sh-dx">' + text + '</div>' : '') + '</div>' +
-      (w.drive || w.ig ? '' : vpHTML(true)) + '</div>' +
+      (w.drive || w.ig ? '' : vpHTML(true)) + (CRUDO ? '<i class="sh-grip" aria-hidden="true"></i>' : '') + '</div>' + (CRUDO ? '<i class="sh-sp"></i></div>' : '') +
       '<div class="sh-act">' + acts + '</div>' +
       '<aside class="sh-pan" aria-label="Descripción"><h3 class="sd-t">' + esc(w.title) + '</h3><button class="x sd-x" type="button" data-close aria-label="Cerrar">✕</button>' +
       (text ? '<div class="d-txt">' + text + '</div>' : '<div class="nod">Sin descripción.</div>') + (foot ? '<div class="sd-foot">' + foot + '</div>' : '') + '</aside></article>';
@@ -1765,11 +1851,13 @@
     SH.items = [].slice.call(SH.feed.children);
     SH.i = -1;
     show(SH.d);
+    if (CRUDO) [].forEach.call(SH.feed.querySelectorAll('.sh-sw'), function (sw) { sw.scrollLeft = swMid(sw); });   // cada video, en el medio de lo que se desliza de costado
     SH.mt = parseFloat(getComputedStyle(SH.items[0]).scrollMarginTop) || 0;
     SH.feed.scrollTop = 0;
     shActive(0, true); clearTimeout(shRest); shRest = setTimeout(function () { shActive(shIndex()); }, 300);   // primero se abre; el video, después
     setTimeout(SB, 320);
   }
+  function swMid(sw) { var v = sw.querySelector('.sh-v'); return sw.firstElementChild.offsetWidth + v.offsetWidth / 2 - sw.clientWidth / 2; }   // lo deslizado de costado con el video en el medio
   function shDesc() {                                    // la descripción de al lado, abierta o cerrada: en todos los verticales
     var off = SH.d.classList.toggle('sd-off');
     [].forEach.call(SH.d.querySelectorAll('[data-desc]'), function (b) { b.setAttribute('aria-pressed', String(!off)); });
@@ -1840,7 +1928,7 @@
     // lo que se va junto con el vertical: los que asoman arriba y abajo y los botones de la ventana (y el fondo)
     var around = function () { return [SH.items[SH.i - 1], SH.items[SH.i + 1], SH.d.querySelector('.sh-nav'), SH.d.querySelector('.sh-x')].filter(Boolean); };
     SH.feed.addEventListener('pointerdown', function (e) {
-      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if ((e.pointerType === 'mouse' && e.button !== 0) || (CRUDO && e.pointerType !== 'mouse')) return;   // crudo, con el dedo: el deslizamiento del navegador (abajo)
       var v = e.target.closest('.sh-it.on .sh-v');     // con el dedo o con el mouse, desde el video
       hz = v ? { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, go: false, on: false, raf: 0, it: v.closest('.sh-it'), mouse: e.pointerType === 'mouse' } : null;
     });
@@ -1914,6 +2002,40 @@
     SH.feed.addEventListener('lostpointercapture', function (e) { if (hz && hz.on && e.target === hz.it && e.pointerId === hz.id) end(); });
     window.addEventListener('blur', function () { if (hz && hz.on) end(); else { back(hz); hz = null; } });
     SH.feed.addEventListener('click', function (e) { if (swallow) { swallow = false; e.preventDefault(); e.stopPropagation(); } }, true);
+    // crudo: de costado, con el deslizamiento del navegador, que anda también encima del reproductor (los toques siguen
+    // siendo de él). El video está en el medio de una tira con un espacio vacío a cada lado: deslizándolo, se va para ese
+    // lado, difuminándose con lo de alrededor; soltándolo pasada la mitad, termina de irse y se cierra; si no, vuelve solo
+    if (CRUDO) {
+      var swT = 0, swV = { sw: null, t: 0, x: 0, v: 0, pk: 0 };
+      var swPaint = function (sw) {
+        var c = swMid(sw), d = Math.abs(sw.scrollLeft - c), o = d > 1 ? Math.max(0, 1 - d / (c / 2)).toFixed(3) : '';
+        sw.closest('.sh-it').style.opacity = o; around().forEach(function (el) { el.style.opacity = o; }); SH.bd.style.opacity = o;
+        SH.d.classList.toggle('sh-drag', d > 1);
+      };
+      var swDone = function (sw) {
+        if (!SH.d.open || sw.closest('.sh-it') !== SH.items[SH.i]) return;
+        clearTimeout(swT);
+        var c = swMid(sw), off = sw.scrollLeft - c, d = Math.abs(off), sg = off < 0 ? -1 : 1, mine = swV.sw === sw;
+        var fl = mine && swV.pk > .6 && swV.v * sg > -.05 && d > 24;   // lo tiraste para ese lado (y no lo estabas volviendo)
+        swV.t = 0; swV.v = 0; swV.pk = 0;
+        if (d <= 1) return swPaint(sw);                                                                  // en su lugar
+        if (d < c / 2 && !fl) return sw.scrollTo({ left: c, behavior: still() ? 'auto' : 'smooth' });  // ni la mitad ni tirado: vuelve
+        sw.closest('.sh-it').style.opacity = ''; around().forEach(function (el) { el.style.opacity = ''; }); SH.bd.style.opacity = ''; SH.d.classList.remove('sh-drag');
+        SH.d.close();
+      };
+      SH.feed.addEventListener('scroll', function (e) {   // (el de cada vertical: no sube solo, se escucha desde acá)
+        var sw = e.target;
+        if (!sw.classList || !sw.classList.contains('sh-sw') || sw.closest('.sh-it') !== SH.items[SH.i]) return;
+        var now = performance.now();
+        if (swV.sw !== sw) swV = { sw: sw, t: 0, x: 0, v: 0 };
+        if (swV.t) swV.v = 0.6 * swV.v + 0.4 * ((sw.scrollLeft - swV.x) / Math.max(1, now - swV.t));   // cómo venía el dedo
+        swV.t = now; swV.x = sw.scrollLeft;
+        var off0 = sw.scrollLeft - swMid(sw); swV.pk = Math.abs(off0) <= 1 ? 0 : Math.max(swV.pk, swV.v * (off0 < 0 ? -1 : 1));   // pk: el envión más fuerte hacia afuera
+        swPaint(sw);
+        clearTimeout(swT); swT = setTimeout(function () { swDone(sw); }, 200);   // quieto: ya se soltó (por si el navegador no avisa)
+      }, { capture: true, passive: true });
+      SH.feed.addEventListener('scrollend', function (e) { var sw = e.target; if (sw.classList && sw.classList.contains('sh-sw')) swDone(sw); }, true);
+    }
     // y siempre queda uno en el centro: si al terminar de deslizar quedó entre dos (pasa en algunos celulares), se
     // termina de acomodar en el más cercano
     function settle() {
@@ -2022,6 +2144,8 @@
     var k = e.key;
     if (/^(ArrowDown|PageDown)$/.test(k)) { e.preventDefault(); shGo(SH.i + 1); }
     else if (/^(ArrowUp|PageUp)$/.test(k)) { e.preventDefault(); shGo(SH.i - 1); }
+    else if (k === ' ' && CRUDO && !(e.target.closest && e.target.closest('button, a'))) e.preventDefault();   // crudo: el espacio no pasa al de abajo (pausa el reproductor, con el foco en él)
+    else if (CRUDO) return;
     else if (k === 'k' || k === 'K' || (k === ' ' && !(e.target.closest && e.target.closest('button, a')))) { e.preventDefault(); reelToggle(); }   // como en YouTube: espacio o K pausa
     else if (k === 'm' || k === 'M') { e.preventDefault(); vMute(RP); }
   });
