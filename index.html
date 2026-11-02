@@ -248,6 +248,59 @@ a.yt-ch:hover, a.yt-ch:focus-visible { color: var(--text); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .work.v .yt-m { margin-top: 10px; }
 .work.v .yt-s { font-size: 14px; }
+/* ---------------- efectos por views (prueba) ----------------
+   Mientras más views, más se nota la tarjeta. El recuadro de la carátula: fino desde 10 K, violeta y con brillo desde
+   100 K; desde 1 M, dos luces que le dan vueltas (desde 10 M, de fuego). Las views, en una píldora: un borde, violeta,
+   encendida y, desde 10 M, con un reflejo. Las luces y el reflejo andan solo en las tarjetas que están a la vista
+   (app.js); las demás quedan con el recuadro quieto. Lo que se mueve, con transform y en tiritas finitas: lo mueve la
+   placa de video sin redibujar nada. Para sacarlo: EFECTOS = false en app.js (y se borra este bloque) */
+.fx-views .work[data-n] .thumb::after { content: ""; position: absolute; z-index: 3; inset: 0; border: 1px solid rgba(146, 114, 240, .6); pointer-events: none; }
+.fx-views .work[data-n="2"] .thumb::after, .fx-views .work[data-n="3"] .thumb::after { border: 2px solid var(--acc); }
+.fx-views .work[data-n="4"] .thumb::after { border: 3px solid transparent; border-image: conic-gradient(from 200deg, #7650ea, #c25cff, #ff6ad5, #ffb36b, #ff6ad5, #c25cff, #7650ea) 1; }   /* de fuego */
+.fx-views .work[data-n="2"] .thumb { box-shadow: 0 0 14px rgba(146, 114, 240, .35); }
+.fx-views .work[data-n="3"] .thumb { padding: 2px; box-shadow: 0 0 16px rgba(146, 114, 240, .45); }   /* la carátula, adentro del recuadro */
+.fx-views .work[data-n="4"] .thumb { padding: 3px; box-shadow: 0 0 22px rgba(170, 110, 255, .6); }
+/* las luces: cuatro tiritas (arriba, derecha, abajo, izquierda), cada una con dos luces que pasan de una tirita a la otra
+   en las esquinas, una del lado opuesto de la otra */
+.fx-ring { display: none; }
+.fx-views .work.fx-on .fx-ring { display: block; position: absolute; z-index: 4; inset: 0; pointer-events: none; --b: 2px; --t: 3.4s; --l1: rgba(214, 200, 255, .85); --l2: #fff; }
+.fx-views .work[data-n="4"].fx-on .fx-ring { --b: 3px; --t: 2.4s; --l1: rgba(255, 140, 205, .95); --l2: #ffe6c2; }
+.fx-ring b { position: absolute; overflow: hidden; }
+.fx-ring b:nth-child(1) { left: 0; right: 0; top: 0; height: var(--b); }
+.fx-ring b:nth-child(2) { top: 0; bottom: 0; right: 0; width: var(--b); }
+.fx-ring b:nth-child(3) { left: 0; right: 0; bottom: 0; height: var(--b); }
+.fx-ring b:nth-child(4) { top: 0; bottom: 0; left: 0; width: var(--b); }
+.fx-ring b::before, .fx-ring b::after { content: ""; position: absolute; animation: var(--k) var(--t) linear infinite; }
+.fx-ring b::after { animation-delay: calc(var(--t) / -2); }   /* la otra luz, del lado opuesto */
+.fx-ring b:nth-child(odd)::before, .fx-ring b:nth-child(odd)::after { top: 0; bottom: 0; width: 45%; background: linear-gradient(90deg, transparent, var(--l1) 35%, var(--l2) 50%, var(--l1) 65%, transparent); }
+.fx-ring b:nth-child(even)::before, .fx-ring b:nth-child(even)::after { left: 0; right: 0; height: 45%; background: linear-gradient(180deg, transparent, var(--l1) 35%, var(--l2) 50%, var(--l1) 65%, transparent); }
+.fx-ring b:nth-child(1)::before, .fx-ring b:nth-child(1)::after { left: 0; }
+.fx-ring b:nth-child(2)::before, .fx-ring b:nth-child(2)::after { top: 0; }
+.fx-ring b:nth-child(3)::before, .fx-ring b:nth-child(3)::after { right: 0; }
+.fx-ring b:nth-child(4)::before, .fx-ring b:nth-child(4)::after { bottom: 0; }
+.work.v .fx-ring b:nth-child(1) { --k: fx-l1v; } .work.v .fx-ring b:nth-child(2) { --k: fx-l2v; } .work.v .fx-ring b:nth-child(3) { --k: fx-l3v; } .work.v .fx-ring b:nth-child(4) { --k: fx-l4v; }
+.work:not(.v) .fx-ring b:nth-child(1) { --k: fx-l1h; } .work:not(.v) .fx-ring b:nth-child(2) { --k: fx-l2h; } .work:not(.v) .fx-ring b:nth-child(3) { --k: fx-l3h; } .work:not(.v) .fx-ring b:nth-child(4) { --k: fx-l4h; }
+/* cada luz recorre su lado en el tiempo que le toca según lo largo que es (vertical 9:16, horizontal 16:9) y dobla en la esquina */
+@keyframes fx-l1v { 0% { transform: translateX(-50%); } 18% { transform: translateX(172%); } 22.05% { transform: translateX(222%); } 22.06% { transform: translateX(-100%); } 95.95% { transform: translateX(-100%); } 100% { transform: translateX(-50%); } }
+@keyframes fx-l2v { 0% { transform: translateY(-100%); } 10.8% { transform: translateY(-100%); } 18% { transform: translateY(-50%); } 50% { transform: translateY(172%); } 57.2% { transform: translateY(222%); } 100% { transform: translateY(222%); } }
+@keyframes fx-l3v { 0% { transform: translateX(100%); } 45.95% { transform: translateX(100%); } 50% { transform: translateX(50%); } 68% { transform: translateX(-172%); } 72.05% { transform: translateX(-222%); } 100% { transform: translateX(-222%); } }
+@keyframes fx-l4v { 0% { transform: translateY(-172%); } 7.2% { transform: translateY(-222%); } 7.21% { transform: translateY(100%); } 60.8% { transform: translateY(100%); } 68% { transform: translateY(50%); } 100% { transform: translateY(-172%); } }
+@keyframes fx-l1h { 0% { transform: translateX(-50%); } 32% { transform: translateX(172%); } 39.2% { transform: translateX(222%); } 39.21% { transform: translateX(-100%); } 92.8% { transform: translateX(-100%); } 100% { transform: translateX(-50%); } }
+@keyframes fx-l2h { 0% { transform: translateY(-100%); } 27.95% { transform: translateY(-100%); } 32% { transform: translateY(-50%); } 50% { transform: translateY(172%); } 54.05% { transform: translateY(222%); } 100% { transform: translateY(222%); } }
+@keyframes fx-l3h { 0% { transform: translateX(100%); } 42.8% { transform: translateX(100%); } 50% { transform: translateX(50%); } 82% { transform: translateX(-172%); } 89.2% { transform: translateX(-222%); } 100% { transform: translateX(-222%); } }
+@keyframes fx-l4h { 0% { transform: translateY(-172%); } 4.05% { transform: translateY(-222%); } 4.06% { transform: translateY(100%); } 77.95% { transform: translateY(100%); } 82% { transform: translateY(50%); } 100% { transform: translateY(-172%); } }
+/* las views, en una píldora */
+.fx-views .work[data-n] .yt-s { align-items: center; }   /* la píldora, a la altura del nombre */
+.fx-views .work[data-n] .yt-v { display: inline-flex; align-items: center; gap: 3px; padding: 0 8px 0 6px; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(146, 114, 240, .6); }
+.fx-views .work[data-n="2"] .yt-v { background: rgba(146, 114, 240, .22); box-shadow: none; color: #ddd2ff; }
+.fx-views .work[data-n="3"] .yt-v { background: linear-gradient(90deg, #7650ea, #a57cff); box-shadow: 0 0 12px rgba(146, 114, 240, .55); color: #fff; }
+.fx-views .work[data-n="4"] .yt-v { position: relative; overflow: hidden; background: linear-gradient(90deg, #7650ea, #c25cff 55%, #ff7ab3); box-shadow: 0 0 16px rgba(194, 92, 255, .6); color: #fff; }
+.fx-views .work[data-n="4"].fx-on .yt-v::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 60%; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .45), transparent); transform: translateX(-130%) skewX(-14deg); animation: fx-sweep 2.8s ease-in-out infinite; pointer-events: none; }
+@keyframes fx-sweep { 0% { transform: translateX(-130%) skewX(-14deg); } 32%, 100% { transform: translateX(260%) skewX(-14deg); } }
+.page.still .fx-ring b::before, .page.still .fx-ring b::after, .page.still .yt-v::after { animation-play-state: paused !important; }   /* con una ventana abierta, quietas (no se ven) */
+.fx-scroll .fx-ring b::before, .fx-scroll .fx-ring b::after, .fx-scroll .yt-v::after { animation-play-state: paused !important; }   /* mientras se scrollea, quietas (app.js): el scroll va liviano */
+@media (prefers-reduced-motion: reduce) { .fx-ring { display: none !important; } .fx-views .yt-v::after { animation: none !important; } }
+/* ---------------- (fin de los efectos por views) ---------------- */
 
 /* los temas, como los del inicio de YouTube: Todo y los temas de los videos, de los que más tienen a los que
    menos. Elegido, en blanco hueso; los demás, apenas más claros que el fondo, y con el mouse encima, un poco
@@ -935,6 +988,6 @@ button.sh-i[data-like] { color: var(--acc); }   /* el corazón, ya likeado: llen
 <script src="js/mock-data.js?v=4c72eb1b"></script>
 <script src="js/config.js"></script>
 <script src="js/data.js?v=9c9d6f2f"></script>
-<script src="js/app.js?v=8d3e8a8e"></script>
+<script src="js/app.js?v=59f58174"></script>
 </body>
 </html>

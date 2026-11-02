@@ -7,6 +7,10 @@
   // encima y sin tocarle el sonido, los subtítulos ni el final). Con false vuelven los controles nuestros y los recortes
   var CRUDO = true;
   document.documentElement.classList.toggle('crudo', CRUDO);
+  // prueba: mientras más views, más se nota la tarjeta (el recuadro de la carátula y las views en una píldora).
+  // Para sacarlo: false (y, si queda así, se borran el bloque «efectos por views» de index.html y lo marcado acá)
+  var EFECTOS = true;
+  document.documentElement.classList.toggle('fx-views', EFECTOS);
   // las imágenes aparecen suave cuando terminan de cargar (el fundido está en el CSS): acá se marca cada una
   document.addEventListener('load', function (e) { var t = e.target; if (t && t.tagName === 'IMG') t.classList.add('ok'); }, true);
   // la pantalla de carga se va cuando la página está lista (y, si algo se traba, igual a los 12 segundos)
@@ -162,8 +166,10 @@
       ? '<a class="yt-ch" href="' + esc(chUrl(ch)) + '" target="_blank" rel="noopener" draggable="false">' + esc(w.who) + '</a>'
       : '<span class="yt-ch">' + esc(w.who) + '</span>';
     var views = w.views != null ? '<span class="yt-v">' + EYE + ' ' + abbr(w.views) + '<span class="sr"> views</span></span>' : '';
-    return '<div class="work' + (w.vertical ? ' v' : '') + '" data-work="' + w.id + '">' +
+    var n = !EFECTOS || w.views == null || w.views < 1e4 ? 0 : w.views < 1e5 ? 1 : w.views < 1e6 ? 2 : w.views < 1e7 ? 3 : 4;   // efectos por views: el nivel (10 K, 100 K, 1 M, 10 M)
+    return '<div class="work' + (w.vertical ? ' v' : '') + '"' + (n ? ' data-n="' + n + '"' : '') + ' data-work="' + w.id + '">' +
       '<button class="thumb ' + (w.vertical ? 'r916' : 'r169') + '" type="button" aria-label="' + esc('Ver “' + w.title + '”') + '">' +
+      (n >= 3 ? '<i class="fx-ring" aria-hidden="true"><b></b><b></b><b></b><b></b></i>' : '') +   // efectos por views: las luces que dan vueltas
       (w.thumb ? '<img src="' + esc(w.thumb) + '" alt="" loading="lazy" decoding="async" draggable="false">' : LIVE && w.tt ? ttCap(w.tt) : '') +
       (w.dur ? '<span class="dur">' + w.dur + '</span>' : '') + '</button>' +
       '<div class="yt-m">' + (w.vertical ? '' : face(w)) + '<div class="yt-t"><span class="yt-ttl">' + esc(w.title) + '</span>' +
@@ -410,6 +416,22 @@
     put(out.splice(0, 2).join(''));
     (function next() { if (out.length) rest = setTimeout(function () { put(out.shift()); next(); }, 0); })();
   }
+  // efectos por views: las luces que dan vueltas alrededor de la carátula, solo en las tarjetas que están a la vista (las
+  // demás, con el recuadro quieto): así hay pocas a la vez y no pesa. Se vuelven a mirar cuando cambian las tarjetas
+  if (EFECTOS && window.IntersectionObserver && window.MutationObserver) (function () {
+    var vis = new IntersectionObserver(function (es) { es.forEach(function (e) { e.target.classList.toggle('fx-on', e.isIntersecting); }); }, { rootMargin: '80px' });
+    var t = 0, mirar = function () {
+      t = 0; vis.disconnect();
+      [].forEach.call(feed.querySelectorAll('.work[data-n="3"], .work[data-n="4"]'), function (w) { vis.observe(w); });
+    };
+    new MutationObserver(function () { if (!t) t = setTimeout(mirar, 50); }).observe(feed, { childList: true, subtree: true });
+    // mientras se scrollea la página, las luces se quedan quietas: el scroll con el dedo va igual de liviano que sin ellas
+    var quieto = 0, R = document.documentElement;
+    PAGE.addEventListener('scroll', function () {
+      if (!quieto) R.classList.add('fx-scroll');
+      clearTimeout(quieto); quieto = setTimeout(function () { quieto = 0; R.classList.remove('fx-scroll'); }, 200);
+    }, { passive: true });
+  })();
 
   // ---------------- los tags, entre el canal y los videos ----------------
   // Como los del inicio de YouTube: primero Todo y después los tags activos que tienen algún video, en el orden
